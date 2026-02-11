@@ -4,6 +4,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "Network/OnlineSessionSubsystem.h"
 #include "UIMenu.generated.h"
 
 
@@ -37,6 +38,9 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> Txt_Status;
 
+	UPROPERTY()
+	TObjectPtr<UOnlineSessionSubsystem> SessionSubsystem;
+
 
 	UFUNCTION()
 	void OnCreateRoomClicked();
@@ -60,4 +64,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void CloseMenu();
+
+	UFUNCTION()
+	void OnSessionsFound(const TArray<FCustomSessionInfo>& Sessions, bool bSuccess);
+
+private:
+	TArray<FCustomSessionInfo> FoundSessions;
+	int32 SelectedSessionIndex = -1;
 };

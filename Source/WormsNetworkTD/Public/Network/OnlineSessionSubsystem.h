@@ -34,7 +34,7 @@ class WORMSNETWORKTD_API UOnlineSessionSubsystem : public UGameInstanceSubsystem
 protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
-private:
+public:
 	IOnlineSessionPtr Session;
 	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
 
