@@ -12,6 +12,7 @@
 				"Engine",
 				"Paper2D",
 				"OnlineSubsystemUtils"
+				"UMG"
 			]
 		}
 	],

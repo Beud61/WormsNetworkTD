@@ -9,6 +9,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "CustomPaperCharacter.h"
+#include "UI/UIMenu.h"
 #include "CustomPlayerController.generated.h"
 
 
@@ -52,10 +53,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Data")
 	TObjectPtr<ACustomPaperCharacter> MyPlayer = nullptr;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UUIMenu> MenuWidgetClass;
+
+	UPROPERTY()
+	TObjectPtr<UUIMenu> MenuWidgetInstance;
+
 #if WITH_EDITOR
 	UFUNCTION(BlueprintInternalUseOnly)
 	void Prototype_InputAction(const FInputActionValue& Value) {};
 #endif
+
+public:
 
 	UFUNCTION(BlueprintCallable)
 	void Move(const FInputActionValue& Value);
@@ -65,4 +74,11 @@ protected:
 
 	UFUNCTION(BlueprintCallable)
 	void UpdateAnimations();
+
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ShowMainMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void HideMainMenu();
+
 };
