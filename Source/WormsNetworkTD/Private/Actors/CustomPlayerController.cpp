@@ -21,6 +21,7 @@ void ACustomPlayerController::BeginPlay()
 	}
 
 	MyPlayer = Cast<ACustomPaperCharacter>(GetPawn());
+	ShowMainMenu();
 }
 
 void ACustomPlayerController::Tick(float DeltaTime)
@@ -98,4 +99,27 @@ void ACustomPlayerController::UpdateAnimations()
 	}
 
 	MyPlayer->GetSprite()->SetFlipbook(MyPlayer->CurrentAnim);
+}
+
+void ACustomPlayerController::ShowMainMenu()
+{
+	if (!MenuWidgetClass) return;
+
+	if (!MenuWidgetInstance)
+	{
+		MenuWidgetInstance = CreateWidget<UUIMenu>(this, MenuWidgetClass);
+	}
+
+	if (MenuWidgetInstance)
+	{
+		MenuWidgetInstance->AddToViewport();
+	}
+}
+
+void ACustomPlayerController::HideMainMenu()
+{
+	if (MenuWidgetInstance)
+	{
+		MenuWidgetInstance->CloseMenu();
+	}
 }
