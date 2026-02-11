@@ -1,25 +1,21 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "UI/UIMenu.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "Components/ComboBoxString.h"
+#include "Components/CanvasPanel.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 void UUIMenu::NativeConstruct()
 {
 	Super::NativeConstruct();
-	if (UGameInstance* GameInstance = GetGameInstance())
-	{
-		SessionSubsystem = GameInstance->GetSubsystem<UOnlineSessionSubsystem>();
-		UE_LOG(LogTemp, Warning, TEXT("Session Subsystem: %s"), *GetNameSafe(SessionSubsystem));
-	}
+
 	SetupMenu();
 }
 
 void UUIMenu::SetupMenu()
 {
-	// Bind Events
+	// === BIND MENU PRINCIPAL ===
 	if (Btn_CreateRoom)
 	{
 		Btn_CreateRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCreateRoomClicked);
@@ -31,7 +27,7 @@ void UUIMenu::SetupMenu()
 	}
 
 	if (Btn_FindRoom)
-	{		
+	{
 		Btn_FindRoom->OnClicked.AddDynamic(this, &UUIMenu::OnFindRoomClicked);
 	}
 
@@ -45,91 +41,165 @@ void UUIMenu::SetupMenu()
 		Btn_Quit->OnClicked.AddDynamic(this, &UUIMenu::OnQuitClicked);
 	}
 
+	// === BIND CREATE ROOM SETTINGS ===
+	if (Btn_CloseCreateRoomSettings)
+	{
+		Btn_CloseCreateRoomSettings->OnClicked.AddDynamic(this, &UUIMenu::OnCloseCreateRoomSettingsClicked);
+	}
+
+	if (Btn_OpenRoom)
+	{
+		Btn_OpenRoom->OnClicked.AddDynamic(this, &UUIMenu::OnOpenRoomClicked);
+	}
+
+	if (GameModeChoice)
+	{
+		GameModeChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnGameModeChanged);
+	}
+
+	if (WaterRisingChoice)
+	{
+		WaterRisingChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnWaterRisingChanged);
+	}
+
+	if (UnitLifeChoice)
+	{
+		UnitLifeChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnUnitLifeChanged);
+	}
+
+	if (UnitCountChoice)
+	{
+		UnitCountChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnUnitCountChanged);
+	}
+
+	// Afficher le menu principal au démarrage
+	ShowMainMenu();
+
 	// Afficher le curseur
 	if (APlayerController* PC = GetOwningPlayer())
 	{
 		PC->bShowMouseCursor = true;
 		PC->SetInputMode(FInputModeUIOnly());
 	}
-	// S'abonner aux événements du subsystem
-	if (SessionSubsystem)
-	{
-		SessionSubsystem->OnFindSessionsCompleteEvent.AddDynamic(this, &UUIMenu::OnSessionsFound);
-	}
 }
+
+// === CALLBACKS MENU PRINCIPAL ===
 
 void UUIMenu::OnCreateRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room clicked"));
-	
-	if (!SessionSubsystem) return;
-
-	FString SessionName = TEXT("DefaultRoom");
-	/*if (SessionNameInput)
-	{
-		SessionName = SessionNameInput->GetText().ToString();
-	}*/
-
-	// Créer une session avec 4 joueurs max, en LAN
-	SessionSubsystem->CreateSession(SessionName, 4, true);
-
-	// Créer le beacon host
-	SessionSubsystem->CreateHostBeacon(7787, true);
-
-	UE_LOG(LogTemp, Warning, TEXT("Session creation initiated with name: %s"), *SessionName);
-	
+	ShowCreateRoomSettings();
 }
 
 void UUIMenu::OnJoinRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Join Room clicked"));
-	
-	if (!SessionSubsystem)
-	{
-		UE_LOG(LogTemp, Error, TEXT("SessionSubsystem est null"));
-		return;
-	}
 
-	if (FoundSessions.Num() > 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Tentative de rejoindre la session: %s"),
-			*FoundSessions[0].SessionName);
-
-		// Utiliser directement JoinGameSession au lieu de CustomJoinSession
-		const FOnlineSessionSearchResult& SessionResult = SessionSubsystem->SearchResults[FoundSessions[0].SessionSearchResultIndex];
-		SessionSubsystem->JoinGameSession(SessionResult);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("FoundSessions est vide ! Lancez 'Find Room' d'abord."));
-	}
+	//TODO: Menu pour joindre une room
 }
 
 void UUIMenu::OnFindRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Find Room clicked"));
 
-	if (!SessionSubsystem) return;
-
-	// Chercher jusqu'à 20 sessions en LAN
-	SessionSubsystem->FindSessions(20, true);
+	//TODO: Chercher les rooms disponibles
 }
 
 void UUIMenu::OnSettingsClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Settings clicked"));
-	
+
 	// TODO: Settings
 }
 
 void UUIMenu::OnQuitClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Quit clicked!"));
-	
-	// Quit
+
 	if (APlayerController* PC = GetOwningPlayer())
 	{
 		UKismetSystemLibrary::QuitGame(GetWorld(), PC, EQuitPreference::Quit, false);
+	}
+}
+
+// === CALLBACKS CREATE ROOM SETTINGS ===
+
+void UUIMenu::OnCloseCreateRoomSettingsClicked()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Close CreateRoomSettings clicked"));
+	ShowMainMenu();
+}
+
+void UUIMenu::OnOpenRoomClicked()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Open Room clicked - GameMode: %s, Turns: %d, Life: %d, Count: %d"),
+		*SelectedGameMode, SelectedTurnsBeforeWater, SelectedUnitLife, SelectedUnitCount);
+
+	// TODO: Créer la session réseau avec les paramètres choisis
+
+	if (Txt_Status)
+	{
+		Txt_Status->SetText(FText::FromString(TEXT("Room Status : Open")));
+		Txt_Status->SetColorAndOpacity(FLinearColor::Green);
+	}
+}
+
+void UUIMenu::OnGameModeChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	SelectedGameMode = SelectedItem;
+	UE_LOG(LogTemp, Log, TEXT("Game Mode changed to: %s"), *SelectedGameMode);
+}
+
+void UUIMenu::OnWaterRisingChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	SelectedTurnsBeforeWater = FCString::Atoi(*SelectedItem);
+	UE_LOG(LogTemp, Log, TEXT("Turns Before Water changed to: %d"), SelectedTurnsBeforeWater);
+}
+
+void UUIMenu::OnUnitLifeChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	SelectedUnitLife = FCString::Atoi(*SelectedItem);
+	UE_LOG(LogTemp, Log, TEXT("Unit Life changed to: %d"), SelectedUnitLife);
+}
+
+void UUIMenu::OnUnitCountChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	SelectedUnitCount = FCString::Atoi(*SelectedItem);
+	UE_LOG(LogTemp, Log, TEXT("Unit Count changed to: %d"), SelectedUnitCount);
+}
+
+// === FONCTIONS UTILITAIRES ===
+
+void UUIMenu::ShowMainMenu()
+{
+	if (MenuPanel)
+	{
+		MenuPanel->SetVisibility(ESlateVisibility::Visible);
+	}
+
+	if (CreateRoomSettings)
+	{
+		CreateRoomSettings->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UUIMenu::ShowCreateRoomSettings()
+{
+	if (MenuPanel)
+	{
+		MenuPanel->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	if (CreateRoomSettings)
+	{
+		CreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
+	}
+
+	// Reset le statut
+	if (Txt_Status)
+	{
+		Txt_Status->SetText(FText::FromString(TEXT("Room Status : Closed")));
+		Txt_Status->SetColorAndOpacity(FLinearColor::Red);
 	}
 }
 
@@ -141,29 +211,5 @@ void UUIMenu::CloseMenu()
 	{
 		PC->bShowMouseCursor = false;
 		PC->SetInputMode(FInputModeGameOnly());
-	}
-}
-
-void UUIMenu::OnSessionsFound(const TArray<FCustomSessionInfo>& Sessions, bool bSuccess)
-{
-	FoundSessions = Sessions;
-
-	//if (!SessionListBox) return;
-
-	// Vider la liste
-	//SessionListBox->ClearChildren();
-
-	// Afficher les sessions trouvées
-	for (int32 i = 0; i < Sessions.Num(); i++)
-	{
-		// Créer un widget pour chaque session
-		// Vous devrez créer un widget Blueprint pour afficher les infos de session
-		// Pour l'instant, voici un exemple simplifié
-
-		UE_LOG(LogTemp, Log, TEXT("Session trouvée: %s (%d/%d) - Ping: %d"),
-			*Sessions[i].SessionName,
-			Sessions[i].CurrentPlayers,
-			Sessions[i].MaxPlayers,
-			Sessions[i].Ping);
 	}
 }
