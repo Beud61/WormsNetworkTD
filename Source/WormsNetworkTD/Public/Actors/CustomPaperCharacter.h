@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -8,7 +6,6 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "PaperFlipbookComponent.h"
 #include "CustomPaperCharacter.generated.h"
-
 
 UENUM(BlueprintType)
 enum class EPlayerState : uint8
@@ -19,20 +16,28 @@ enum class EPlayerState : uint8
 	Falling  UMETA(DisplayName = "Falling")
 };
 
-/**
- * 
- */
 UCLASS()
 class WORMSNETWORKTD_API ACustomPaperCharacter : public APaperCharacter
 {
 	GENERATED_BODY()
 
-protected:
+public:
 
 	ACustomPaperCharacter();
 
+	virtual void Tick(float DeltaTime) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+protected:
+
+	void UpdateAnimations();
+
+	UFUNCTION()
+	void OnRep_PlayerAnimState();
 
 public:
+
+	/* ================= CAMERA ================= */
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	TObjectPtr<UCameraComponent> Camera;
@@ -40,7 +45,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	TObjectPtr<USpringArmComponent> SpringArm;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sprite")
+	/* ================= ANIMATION ================= */
+
+	UPROPERTY(ReplicatedUsing = OnRep_PlayerAnimState, BlueprintReadOnly, Category = "Sprite")
 	EPlayerState PlayerAnimState = EPlayerState::Idle;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sprite")
@@ -55,7 +62,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sprite")
 	TObjectPtr<UPaperFlipbook> FallAnim;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sprite")
-	TObjectPtr<UPaperFlipbook> CurrentAnim;
+	UPROPERTY(ReplicatedUsing = OnRep_FacingDirection)
+	float FacingDirection = 1.f;
 
+	UFUNCTION()
+	void OnRep_FacingDirection();
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetFacingDirection(float NewDirection);
 };

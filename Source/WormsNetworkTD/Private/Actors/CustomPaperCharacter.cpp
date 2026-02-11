@@ -1,23 +1,125 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "Actors/CustomPaperCharacter.h"
-#include "EnhancedInputSubsystems.h"	
-#include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Kismet/KismetSystemLibrary.h"
-#include "Camera/CameraComponent.h"
-#include "Kismet/GameplayStatics.h"
+#include <Net/UnrealNetwork.h>
 
 ACustomPaperCharacter::ACustomPaperCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	GetCharacterMovement()->AirControl = 1;
+	/* ================= NETWORK ================= */
 
-	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("Spring Arm"));
+	bReplicates = true;
+	SetReplicateMovement(true);
+
+	/* ================= 2D SETUP ================= */
+
+	GetCharacterMovement()->bConstrainToPlane = true;
+	GetCharacterMovement()->SetPlaneConstraintNormal(FVector(0.f, 1.f, 0.f));
+	GetCharacterMovement()->bUseFlatBaseForFloorChecks = true;
+
+	bUseControllerRotationYaw = false;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+
+	/* ================= MOVEMENT TUNING ================= */
+
+	GetCharacterMovement()->GravityScale = 2.5f;
+	GetCharacterMovement()->JumpZVelocity = 800.f;
+	GetCharacterMovement()->AirControl = 0.8f;
+	GetCharacterMovement()->MaxWalkSpeed = 600.f;
+	GetCharacterMovement()->BrakingFrictionFactor = 2.f;
+
+	/* ================= CAMERA ================= */
+
+	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(RootComponent);
+	SpringArm->TargetArmLength = 500.f;
+	SpringArm->bDoCollisionTest = false;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(SpringArm);
+	Camera->bUsePawnControlRotation = false;
+}
+
+void ACustomPaperCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	// Le serveur décide des animations
+	if (HasAuthority())
+	{
+		UpdateAnimations();
+	}
+}
+
+void ACustomPaperCharacter::UpdateAnimations()
+{
+	if (!GetCharacterMovement())
+		return;
+
+	EPlayerState NewState = PlayerAnimState;
+
+	if (!GetCharacterMovement()->IsMovingOnGround())
+	{
+		if (GetVelocity().Z > 0)
+			NewState = EPlayerState::Jumping;
+		else
+			NewState = EPlayerState::Falling;
+	}
+	else
+	{
+		if (FMath::IsNearlyZero(GetVelocity().X))
+			NewState = EPlayerState::Idle;
+		else
+			NewState = EPlayerState::Running;
+	}
+
+	if (NewState != PlayerAnimState)
+	{
+		PlayerAnimState = NewState;
+		OnRep_PlayerAnimState(); // Mise à jour serveur immédiate
+	}
+}
+
+void ACustomPaperCharacter::OnRep_PlayerAnimState()
+{
+	switch (PlayerAnimState)
+	{
+	case EPlayerState::Idle:
+		if (IdleAnim) GetSprite()->SetFlipbook(IdleAnim);
+		break;
+
+	case EPlayerState::Running:
+		if (RunAnim) GetSprite()->SetFlipbook(RunAnim);
+		break;
+
+	case EPlayerState::Jumping:
+		if (JumpAnim) GetSprite()->SetFlipbook(JumpAnim);
+		break;
+
+	case EPlayerState::Falling:
+		if (FallAnim) GetSprite()->SetFlipbook(FallAnim);
+		break;
+
+	default:
+		break;
+	}
+}
+
+void ACustomPaperCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ACustomPaperCharacter, PlayerAnimState);
+	DOREPLIFETIME(ACustomPaperCharacter, FacingDirection);
+}
+
+void ACustomPaperCharacter::OnRep_FacingDirection()
+{
+	GetSprite()->SetRelativeScale3D(FVector(FacingDirection, 1.f, 1.f));
+}
+
+void ACustomPaperCharacter::Server_SetFacingDirection_Implementation(float NewDirection)
+{
+	FacingDirection = FMath::Sign(NewDirection);
+	OnRep_FacingDirection();
 }

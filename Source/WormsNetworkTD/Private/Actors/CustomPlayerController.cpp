@@ -21,14 +21,12 @@ void ACustomPlayerController::BeginPlay()
 	}
 
 	MyPlayer = Cast<ACustomPaperCharacter>(GetPawn());
-	ShowMainMenu();
+	//ShowMainMenu();
 }
 
 void ACustomPlayerController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	UpdateAnimations();
 }
 
 void ACustomPlayerController::SetupInputComponent()
@@ -46,59 +44,21 @@ void ACustomPlayerController::SetupInputComponent()
 
 void ACustomPlayerController::Move(const FInputActionValue& Value)
 {
-	float MovementVector = Value.Get<float>();
-	FVector Forward = MyPlayer->GetActorForwardVector();
-	MyPlayer->AddMovementInput(Forward, MovementVector);
+	float Movement = Value.Get<float>();
+	if (!MyPlayer) return;
 
-	if (MyPlayer->PlayerAnimState != EPlayerState::Jumping)
-		MyPlayer->PlayerAnimState = EPlayerState::Running;
+	MyPlayer->AddMovementInput(FVector::ForwardVector, Movement);
 
-	float Dir = FMath::Sign(MovementVector);
-	MyPlayer->GetSprite()->SetRelativeScale3D(FVector(Dir, 1.f, 1.f));
+	if (Movement != 0.f)
+	{
+		MyPlayer->Server_SetFacingDirection(Movement);
+	}
 }
 
 void ACustomPlayerController::Jump(const FInputActionValue& Value)
 {
-	//if (MyPlayer->GetCharacterMovement()->IsMovingOnGround())
-	//	MyPlayer->LaunchCharacter({ 0.f, 0.f, MyPlayer->JumpVelocity }, false, true);
-	//else if (!MyPlayer->HasDoubleJumped)
-	//{
-	//	MyPlayer->LaunchCharacter({ 0.f, 0.f, MyPlayer->JumpVelocity }, false, true);
-	//	MyPlayer->HasDoubleJumped = true;
-	//}
-
-	MyPlayer->Jump();//Tmp
-	MyPlayer->PlayerAnimState = EPlayerState::Jumping;
-}
-
-void ACustomPlayerController::UpdateAnimations()
-{
-	if (MyPlayer->GetVelocity().Z < 0)
-		MyPlayer->PlayerAnimState = EPlayerState::Falling;
-
-	if (FMath::IsNearlyZero(MyPlayer->GetVelocity().Length()))
-		MyPlayer->PlayerAnimState = EPlayerState::Idle;
-
-	switch (MyPlayer->PlayerAnimState)
-	{
-	case EPlayerState::Idle:
-		MyPlayer->CurrentAnim = MyPlayer->IdleAnim;
-		break;
-	case EPlayerState::Running:
-		MyPlayer->CurrentAnim = MyPlayer->RunAnim;
-		break;
-	case EPlayerState::Jumping:
-		MyPlayer->CurrentAnim = MyPlayer->JumpAnim;
-		break;
-	case EPlayerState::Falling:
-		MyPlayer->CurrentAnim = MyPlayer->FallAnim;
-		break;
-	default:
-		MyPlayer->CurrentAnim = MyPlayer->IdleAnim;
-		break;
-	}
-
-	MyPlayer->GetSprite()->SetFlipbook(MyPlayer->CurrentAnim);
+	if (!MyPlayer) return;
+	MyPlayer->Jump();
 }
 
 void ACustomPlayerController::ShowMainMenu()
