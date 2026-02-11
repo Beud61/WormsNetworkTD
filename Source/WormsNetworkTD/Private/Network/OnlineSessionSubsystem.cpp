@@ -92,6 +92,7 @@ void UOnlineSessionSubsystem::OnFindSessionsCompleted(bool Successful)
 		SessionInfos.Add(SessionInfo);
 	}
 	OnFindSessionsCompleteEvent.Broadcast(SessionInfos, Successful);
+	UE_LOG(LogTemp, Warning, TEXT("Find sessions completed with %d results, success : %d"), SearchResults.Num(), Successful);
 }
 
 void UOnlineSessionSubsystem::JoinGameSession(const FOnlineSessionSearchResult& SessionResult)
@@ -123,14 +124,32 @@ void UOnlineSessionSubsystem::OnJoinSessionCompleted(FName SessionName, EOnJoinS
 	PlayerController->ClientTravel(ConnectString, ETravelType::TRAVEL_Absolute);
 }
 
-void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& SessionInfo, int32 BeaconPOrt, bool bPortOverride)
+void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& SessionInfo, int32 BeaconPort, bool bPortOverride)
 {
 	const FOnlineSessionSearchResult TempResult = SearchResults[SessionInfo.SessionSearchResultIndex];
 	FString ConnectString;
+
+	// CORRECTION : Récupérer l'adresse de connexion depuis la session
+	if (!Session->GetResolvedConnectString(TempResult, NAME_GameSession, ConnectString))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Impossible de recuperer l'adresse de connexion"));
+		OnSessionJoinCompleted.Broadcast(false);
+		return;
+	}
+
 	ALobbyBeaconClient* BeaconClient = GetWorld()->SpawnActor<ALobbyBeaconClient>();
+	if (!BeaconClient)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Impossible de creer le BeaconClient"));
+		OnSessionJoinCompleted.Broadcast(false);
+		return;
+	}
+
 	FURL Destination = FURL(nullptr, *ConnectString, ETravelType::TRAVEL_Absolute);
-	Destination.Port = 7787;
+	Destination.Port = BeaconPort;
+
 	UE_LOG(LogTemp, Warning, TEXT("TRYING TO CONNECT TO : %s:%d"), *Destination.Host, Destination.Port);
+
 	BeaconClient->ConnectToServer(Destination);
 	BeaconClient->OnRequestValidate.BindLambda([this, TempResult](bool bValidated)
 		{
@@ -140,6 +159,7 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 			}
 			else
 			{
+				UE_LOG(LogTemp, Warning, TEXT("Validation du beacon echouee"));
 				OnSessionJoinCompleted.Broadcast(false);
 			}
 		});
