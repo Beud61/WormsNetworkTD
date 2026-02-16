@@ -72,9 +72,6 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void Jump(const FInputActionValue& Value);
 
-	UFUNCTION(BlueprintCallable)
-	void UpdateAnimations();
-
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ShowMainMenu();
 
