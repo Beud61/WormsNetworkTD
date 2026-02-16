@@ -11,7 +11,7 @@ void UOnlineSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Session = Online::GetSessionInterface(GetWorld());
 }
 
-void UOnlineSessionSubsystem::CreateSession(const FString& SessionName, int32 NumPublicConnections, bool isLanMatch)
+void UOnlineSessionSubsystem::CreateSession(const FString& SessionName, int32 NumPublicConnections, bool isLanMatch, const FString& GameMode, int32 UnitLife, int32 UnitCount, int32 TurnsBeforeWater)
 {
 	if (!Session.IsValid())
 		return;
@@ -27,6 +27,10 @@ void UOnlineSessionSubsystem::CreateSession(const FString& SessionName, int32 Nu
 
 	LastSessionSettings->Set("SETTING_SESSIONNAME", SessionName, EOnlineDataAdvertisementType::ViaOnlineService);
 	LastSessionSettings->Set("SETTING_SESSIONSTATE", 0, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	LastSessionSettings->Set("GAME_MODE", GameMode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	LastSessionSettings->Set("UNIT_LIFE", UnitLife, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	LastSessionSettings->Set("UNIT_COUNT", UnitCount, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	LastSessionSettings->Set("TURNS_BEFORE_WATER", TurnsBeforeWater, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	CreateHandle = Session->AddOnCreateSessionCompleteDelegate_Handle
 	(FOnCreateSessionCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnCreateSessionCompleted));
@@ -46,7 +50,7 @@ void UOnlineSessionSubsystem::OnCreateSessionCompleted(FName SessionName, bool S
 		Session->ClearOnCreateSessionCompleteDelegate_Handle(CreateHandle);
 	if (!Successful)
 		return;
-	GetWorld()->ServerTravel("/Game/Maps/Lobby?listen");
+	//GetWorld()->ServerTravel("/Game/Maps/Lobby?listen");
 }
 
 void UOnlineSessionSubsystem::FindSessions(int32 MaxSearchResults, bool IsLANQuery)

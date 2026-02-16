@@ -9,7 +9,7 @@
 void UUIMenu::NativeConstruct()
 {
 	Super::NativeConstruct();
-
+	SessionSubsystem = GetGameInstance()->GetSubsystem<UOnlineSessionSubsystem>();
 	SetupMenu();
 }
 
@@ -103,7 +103,7 @@ void UUIMenu::SetupMenu()
 		CheckBox_FFA->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxFFAClicked);
 
 
-	// Afficher le menu principal au démarrage
+	// Afficher le menu principal au dï¿½marrage
 	ShowMainMenu();
 
 	// Afficher le curseur
@@ -135,7 +135,7 @@ void UUIMenu::OnFindRoomClicked()
 
 	ShowFindRoom();
 	OnCheckBoxAllClicked(true);
-	//TODO: Chercher les rooms disponibles
+	SessionSubsystem->FindSessions(10000, true);
 }
 
 void UUIMenu::OnSettingsClicked()
@@ -167,8 +167,16 @@ void UUIMenu::OnOpenRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Open Room clicked - GameMode: %s, Turns: %d, Life: %d, Count: %d"),
 		*SelectedGameMode, SelectedTurnsBeforeWater, SelectedUnitLife, SelectedUnitCount);
-
-	// TODO: Créer la session réseau avec les paramètres choisis
+	int32 MaxPlayers = GetMaxPlayersFromGameMode();
+	SessionSubsystem->CreateSession(
+		TEXT("MyGameSession"),
+		MaxPlayers,
+		true,
+		SelectedGameMode,
+		SelectedUnitLife,
+		SelectedUnitCount,
+		SelectedTurnsBeforeWater
+	);
 
 	if (Txt_Status)
 	{
@@ -463,4 +471,22 @@ void UUIMenu::CloseMenu()
 		PC->bShowMouseCursor = false;
 		PC->SetInputMode(FInputModeGameOnly());
 	}
+}
+
+int32 UUIMenu::GetMaxPlayersFromGameMode() const
+{
+	if (SelectedGameMode == "1v1")
+	{
+		return 2;
+	}
+	else if (SelectedGameMode == "2v2")
+	{
+		return 4;
+	}
+	else if (SelectedGameMode == "FreeForAll")
+	{
+		return 8;
+	}
+
+	return 2; // sï¿½curitï¿½ par dï¿½faut
 }
