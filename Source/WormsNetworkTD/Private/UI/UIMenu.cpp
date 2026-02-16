@@ -52,6 +52,16 @@ void UUIMenu::SetupMenu()
 		Btn_OpenRoom->OnClicked.AddDynamic(this, &UUIMenu::OnOpenRoomClicked);
 	}
 
+	if (Btn_CloseRoom)
+	{
+		Btn_CloseRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCloseRoomClicked);
+	}
+
+	if (Btn_StartGame)
+	{
+		Btn_StartGame->OnClicked.AddDynamic(this, &UUIMenu::OnStartGameClicked);
+	}
+
 	if (GameModeChoice)
 	{
 		GameModeChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnGameModeChanged);
@@ -142,6 +152,83 @@ void UUIMenu::OnOpenRoomClicked()
 		Txt_Status->SetText(FText::FromString(TEXT("Room Status : Open")));
 		Txt_Status->SetColorAndOpacity(FLinearColor::Green);
 	}
+
+	if (Txt_PlayerNb)
+	{
+		FString StmpMaxPlayer = *SelectedGameMode;
+		int ItmpMaxPlayer = 1;
+
+		if (StmpMaxPlayer == "1V1")
+			ItmpMaxPlayer = 2;
+		else if (StmpMaxPlayer == "2V2" || StmpMaxPlayer == "FFA")
+			ItmpMaxPlayer = 4;
+		
+		StmpMaxPlayer = FString::Printf(TEXT("1/%d"), ItmpMaxPlayer);
+		Txt_PlayerNb->SetText(FText::FromString(StmpMaxPlayer));
+		Txt_PlayerNb->SetColorAndOpacity(FLinearColor::White);
+	}
+
+	if (VB_PlayersInfos && PLayerInfoWidgetClass)
+	{
+		UUserInfoTemplate* PlayerInfoWidget = CreateWidget<UUserInfoTemplate>(GetWorld(), PLayerInfoWidgetClass);
+
+		if (PlayerInfoWidget)
+		{
+			PlayerInfoWidget->UnitNB = SelectedUnitCount;
+			PlayerInfoWidget->PlayerName = TEXT("Player 1");
+
+			VB_PlayersInfos->AddChildToVerticalBox(PlayerInfoWidget);
+			PlayersInfosUI.Add(PlayerInfoWidget);
+		}
+	}
+
+	if (Settings)
+		Settings->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Btn_OpenRoom)
+		Btn_OpenRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Btn_CloseRoom)
+		Btn_CloseRoom->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UUIMenu::OnCloseRoomClicked()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Room CLOSED"));
+
+	//TODO : Kick players in the room
+
+	if (Txt_Status)
+	{
+		Txt_Status->SetText(FText::FromString(TEXT("Room Status : Closed")));
+		Txt_Status->SetColorAndOpacity(FLinearColor::Red);
+	}
+
+	if (Txt_PlayerNb)
+	{
+		Txt_PlayerNb->SetText(FText::FromString(TEXT("0/0")));
+		Txt_PlayerNb->SetColorAndOpacity(FLinearColor::White);
+	}
+
+	if (VB_PlayersInfos)
+	{
+		VB_PlayersInfos->ClearChildren();
+	}
+
+	PlayersInfosUI.Empty();
+
+	if (Settings)
+		Settings->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_OpenRoom)
+		Btn_OpenRoom->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_CloseRoom)
+		Btn_CloseRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+}
+
+void UUIMenu::OnStartGameClicked()
+{
+	// If room is Full
+
+	//Travel to Selected Map
 }
 
 void UUIMenu::OnGameModeChanged(FString SelectedItem, ESelectInfo::Type SelectionType)

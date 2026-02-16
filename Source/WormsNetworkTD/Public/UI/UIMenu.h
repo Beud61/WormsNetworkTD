@@ -8,6 +8,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/Overlay.h"
 #include "Components/VerticalBox.h"
+#include "UI/UserInfoTemplate.h"
 #include "UIMenu.generated.h"
 
 
@@ -45,13 +46,25 @@ public:
 	TObjectPtr<UOverlay> CreateRoomSettings;
 
 	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UOverlay> Settings;
+
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_CloseCreateRoomSettings;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_OpenRoom;
 
 	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Btn_CloseRoom;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Btn_StartGame;
+
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> Txt_Status;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> Txt_PlayerNb;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UComboBoxString> GameModeChoice;
@@ -65,6 +78,16 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UComboBoxString> UnitCountChoice;
 
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UVerticalBox> VB_PlayersInfos;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UUserWidget> PLayerInfoWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TArray<TObjectPtr<UUserInfoTemplate>> PlayersInfosUI;
+
+
 	// Variables pour stocker les choix
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
 	FString SelectedGameMode = "1v1";
@@ -77,6 +100,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
 	int32 SelectedUnitCount = 1;
+
+
+
 
 	// === CALLBACKS MENU PRINCIPAL ===
 	UFUNCTION()
@@ -100,6 +126,12 @@ public:
 
 	UFUNCTION()
 	void OnOpenRoomClicked();
+
+	UFUNCTION()
+	void OnCloseRoomClicked();
+
+	UFUNCTION()
+	void OnStartGameClicked();
 
 	UFUNCTION()
 	void OnGameModeChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
