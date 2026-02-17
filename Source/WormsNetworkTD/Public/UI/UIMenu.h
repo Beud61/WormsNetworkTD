@@ -246,4 +246,10 @@ public:
 	int32 SelectedSessionIndex = INDEX_NONE;
 	UFUNCTION()
 	void HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sessions, bool bWasSuccessful);
+
+	UFUNCTION()
+	int32 ConvertGameModeToID(const FString& GameMode) const;
+
+	UFUNCTION()
+	bool PassFilter(const FCustomSessionInfo& Session) const;
 };

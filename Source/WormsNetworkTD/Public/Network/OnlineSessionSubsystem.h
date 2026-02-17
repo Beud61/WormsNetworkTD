@@ -21,6 +21,8 @@ struct FCustomSessionInfo
 	int32 Ping = 0;
 	UPROPERTY(BlueprintReadOnly)
 	int32 SessionSearchResultIndex = 0;
+	UPROPERTY(BlueprintReadOnly)
+	FString GameMode = "";
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFindGameSessionsComplete, const TArray<FCustomSessionInfo>&, SessionResults, bool, Successful);

@@ -10,6 +10,10 @@ void UUIMenu::NativeConstruct()
 {
 	Super::NativeConstruct();
 	SessionSubsystem = GetGameInstance()->GetSubsystem<UOnlineSessionSubsystem>();
+	if (SessionSubsystem)
+	{
+		SessionSubsystem->OnFindSessionsCompleteEvent.AddDynamic(this, &UUIMenu::HandleFindSessionsCompleted);
+	}
 	SetupMenu();
 }
 
@@ -257,6 +261,8 @@ void UUIMenu::OnCloseRoomClicked()
 	if (Btn_CloseRoom)
 		Btn_CloseRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
 
+	FoundSessions.Empty();
+	SessionSubsystem->DestroySession();
 }
 
 void UUIMenu::OnStartGameClicked()
@@ -310,6 +316,8 @@ void UUIMenu::OnCheckBoxAllClicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+
+	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnCheckBox1V1Clicked(bool bIsChecked)
@@ -330,6 +338,8 @@ void UUIMenu::OnCheckBox1V1Clicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+
+	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnCheckBox2V2Clicked(bool bIsChecked)
@@ -350,6 +360,8 @@ void UUIMenu::OnCheckBox2V2Clicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+
+	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnCheckBoxFFAClicked(bool bIsChecked)
@@ -370,16 +382,36 @@ void UUIMenu::OnCheckBoxFFAClicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+
+	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnRefreshRoomsClicked()
 {
 	//TODO DELETE ROOMS AND FIND NEW ROOMS WITH FILTERS
 
-	if (FindRoomScrollBox)
-		FindRoomScrollBox->ClearChildren();
+	if (!FindRoomScrollBox) return;
 
+	FindRoomScrollBox->ClearChildren();
 	RoomInfosUI.Empty();
+
+	for (int32 i = 0; i < FoundSessions.Num(); i++)
+	{
+		const FCustomSessionInfo& Session = FoundSessions[i];
+
+		if (!PassFilter(Session))
+			continue;
+
+		AddRoomInfoUI(
+			Session.SessionName,
+			ConvertGameModeToID(Session.GameMode),
+			Session.CurrentPlayers,
+			Session.MaxPlayers,
+			Session.Ping
+		);
+
+		//RoomInfosUI.Last()->SessionIndex = i;
+	}
 }
 
 // === FONCTIONS UTILITAIRES ===
@@ -479,15 +511,15 @@ void UUIMenu::CloseMenu()
 
 int32 UUIMenu::GetMaxPlayersFromGameMode() const
 {
-	if (SelectedGameMode == "1v1")
+	if (SelectedGameMode == "1V1")
 	{
 		return 2;
 	}
-	else if (SelectedGameMode == "2v2")
+	else if (SelectedGameMode == "2V2")
 	{
 		return 4;
 	}
-	else if (SelectedGameMode == "FreeForAll")
+	else if (SelectedGameMode == "FFA")
 	{
 		return 4;
 	}
@@ -503,7 +535,34 @@ void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sess
 	}
 
 	FoundSessions = Sessions;
-	SelectedSessionIndex = INDEX_NONE;
+	OnRefreshRoomsClicked();
+}
 
-	// G�n�rer tes lignes UI ici
+int32 UUIMenu::ConvertGameModeToID(const FString& GameMode) const
+{
+	if (GameMode == "1V1")
+		return 0;
+	if (GameMode == "2V2")
+		return 1;
+	if (GameMode == "FFA")
+		return 2;
+
+	return 0;
+}
+
+bool UUIMenu::PassFilter(const FCustomSessionInfo& Session) const
+{
+	if (bCheckBoxAll)
+		return true;
+
+	if (bCheckBox1V1 && Session.GameMode == "1V1")
+		return true;
+
+	if (bCheckBox2V2 && Session.GameMode == "2V2")
+		return true;
+
+	if (bCheckBoxFFA && Session.GameMode == "FFA")
+		return true;
+
+	return false;
 }

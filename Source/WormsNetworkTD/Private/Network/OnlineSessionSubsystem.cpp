@@ -88,6 +88,9 @@ void UOnlineSessionSubsystem::OnFindSessionsCompleted(bool Successful)
 		FCustomSessionInfo SessionInfo;
 		FString SessionName;
 		Result.Session.SessionSettings.Get("SETTING_SESSIONNAME", SessionName);
+		FString GameMode;
+		Result.Session.SessionSettings.Get("GAME_MODE", GameMode);
+		SessionInfo.GameMode = GameMode;
 		SessionInfo.SessionName = SessionName;
 		SessionInfo.CurrentPlayers = Result.Session.SessionSettings.NumPublicConnections - Result.Session.NumOpenPublicConnections;
 		SessionInfo.MaxPlayers = Result.Session.SessionSettings.NumPublicConnections;
@@ -174,9 +177,6 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 
 	UE_LOG(LogTemp, Warning, TEXT("TRYING TO CONNECT TO : %s:%d"), *Destination.Host, Destination.Port);
 
-	// Connexion au Beacon
-	BeaconClient->ConnectToServer(Destination);
-
 	// Callback validation Beacon
 	BeaconClient->OnRequestValidate.BindLambda(
 		[this, TempResult, BeaconClient](bool bValidated)
@@ -206,6 +206,8 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 			}
 		}
 	);
+	// Connexion au Beacon
+	BeaconClient->ConnectToServer(Destination);
 }
 
 void UOnlineSessionSubsystem::DestroySession()
