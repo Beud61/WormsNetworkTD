@@ -53,3 +53,16 @@ void ALobbyBeaconClient::Client_ReservationDenied_Implementation()
 	UE_LOG(LogTemp, Warning, TEXT("RESERVATION DENIED"));
 	OnRequestValidate.Execute(false);
 }
+
+void ALobbyBeaconClient::Server_SendLobbyInfo_Implementation(const FPlayerLobbyInfo& PlayerInfo)
+{
+	if (ALobbyBeaconHostObject* Host = Cast<ALobbyBeaconHostObject>(GetBeaconOwner()))
+	{
+		Host->RegisterOrUpdatePlayer(PlayerInfo);
+	}
+}
+
+void ALobbyBeaconClient::Client_ReceiveLobbyUpdate_Implementation(const TArray<FPlayerLobbyInfo>& Players)
+{
+	OnLobbyUpdated.Broadcast(Players);
+}

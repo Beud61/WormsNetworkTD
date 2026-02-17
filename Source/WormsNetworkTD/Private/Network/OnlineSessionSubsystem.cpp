@@ -130,10 +130,24 @@ void UOnlineSessionSubsystem::OnJoinSessionCompleted(FName SessionName, EOnJoinS
 
 void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& SessionInfo, int32 BeaconPort, bool bPortOverride)
 {
+	if (!Session.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Session interface invalide"));
+		OnSessionJoinCompleted.Broadcast(false);
+		return;
+	}
+
+	if (!SearchResults.IsValidIndex(SessionInfo.SessionSearchResultIndex))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Index de session invalide"));
+		OnSessionJoinCompleted.Broadcast(false);
+		return;
+	}
+
 	const FOnlineSessionSearchResult TempResult = SearchResults[SessionInfo.SessionSearchResultIndex];
 	FString ConnectString;
 
-	// CORRECTION : Récupérer l'adresse de connexion depuis la session
+	// Récupération adresse serveur
 	if (!Session->GetResolvedConnectString(TempResult, NAME_GameSession, ConnectString))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Impossible de recuperer l'adresse de connexion"));
@@ -141,6 +155,7 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 		return;
 	}
 
+	// Spawn du Beacon Client
 	ALobbyBeaconClient* BeaconClient = GetWorld()->SpawnActor<ALobbyBeaconClient>();
 	if (!BeaconClient)
 	{
@@ -149,16 +164,39 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 		return;
 	}
 
+	// Construction URL destination
 	FURL Destination = FURL(nullptr, *ConnectString, ETravelType::TRAVEL_Absolute);
-	Destination.Port = BeaconPort;
+
+	if (bPortOverride)
+	{
+		Destination.Port = BeaconPort;
+	}
 
 	UE_LOG(LogTemp, Warning, TEXT("TRYING TO CONNECT TO : %s:%d"), *Destination.Host, Destination.Port);
 
+	// Connexion au Beacon
 	BeaconClient->ConnectToServer(Destination);
-	BeaconClient->OnRequestValidate.BindLambda([this, TempResult](bool bValidated)
+
+	// Callback validation Beacon
+	BeaconClient->OnRequestValidate.BindLambda(
+		[this, TempResult, BeaconClient](bool bValidated)
 		{
 			if (bValidated)
 			{
+				UE_LOG(LogTemp, Warning, TEXT("Beacon validated, envoi des infos lobby"));
+
+				// Construction infos lobby
+				FPlayerLobbyInfo MyInfo;
+				MyInfo.PlayerName = TEXT("PlayerX");
+				MyInfo.ProfileIcon = 1;
+				MyInfo.TeamIcon = 0;
+				MyInfo.UnitNames = { TEXT("Unit1"), TEXT("Unit2") };
+				MyInfo.PlayerId = FMath::Rand();
+
+				// Envoi au host
+				BeaconClient->Server_SendLobbyInfo(MyInfo);
+
+				// Puis join de la vraie session
 				JoinGameSession(TempResult);
 			}
 			else
@@ -166,7 +204,8 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 				UE_LOG(LogTemp, Warning, TEXT("Validation du beacon echouee"));
 				OnSessionJoinCompleted.Broadcast(false);
 			}
-		});
+		}
+	);
 }
 
 void UOnlineSessionSubsystem::DestroySession()

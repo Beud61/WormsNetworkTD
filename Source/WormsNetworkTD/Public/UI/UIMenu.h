@@ -240,4 +240,10 @@ public:
 
 	UFUNCTION()
 	int32 GetMaxPlayersFromGameMode() const;
+
+	//FIND ROOM
+	TArray<FCustomSessionInfo> FoundSessions;
+	int32 SelectedSessionIndex = INDEX_NONE;
+	UFUNCTION()
+	void HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sessions, bool bWasSuccessful);
 };

@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "OnlineBeaconHostObject.h"
+#include "Beacon/LobbyTypes.h"
+#include "Beacon/LobbyBeaconClient.h"
 #include "LobbyBeaconHostObject.generated.h"
 
 UCLASS()
@@ -15,4 +17,10 @@ public:
 	virtual AOnlineBeaconClient* SpawnBeaconActor(UNetConnection* ClientConnection) override;
 	int32 ReservedSlots = 0;
 	int32 MaxSlots = 4;
+	UPROPERTY()
+	TArray<FPlayerLobbyInfo> ConnectedPlayers;
+	void RegisterOrUpdatePlayer(const FPlayerLobbyInfo& PlayerInfo);
+	void BroadcastLobbyUpdate();
+	UPROPERTY()
+	TArray<ALobbyBeaconClient*> ConnectedClients;
 };

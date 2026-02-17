@@ -125,8 +125,12 @@ void UUIMenu::OnCreateRoomClicked()
 void UUIMenu::OnJoinRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Join Room clicked"));
-
-	//TODO: Menu pour joindre une room
+	if (!FoundSessions.IsValidIndex(SelectedSessionIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No session selected."));
+		return;
+	}
+	SessionSubsystem->CustomJoinSession(FoundSessions[SelectedSessionIndex], 7787, true);
 }
 
 void UUIMenu::OnFindRoomClicked()
@@ -485,8 +489,21 @@ int32 UUIMenu::GetMaxPlayersFromGameMode() const
 	}
 	else if (SelectedGameMode == "FreeForAll")
 	{
-		return 8;
+		return 4;
+	}
+	return 2; // s�curit� par d�faut
+}
+
+void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sessions, bool bWasSuccessful)
+{
+	if (!bWasSuccessful)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed"));
+		return;
 	}
 
-	return 2; // s�curit� par d�faut
+	FoundSessions = Sessions;
+	SelectedSessionIndex = INDEX_NONE;
+
+	// G�n�rer tes lignes UI ici
 }
