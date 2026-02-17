@@ -82,6 +82,27 @@ void UUIMenu::SetupMenu()
 		UnitCountChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnUnitCountChanged);
 	}
 
+
+	// === BIND FIND ROOM SETTINGS ===
+	if (Btn_CloseFindRoom)
+		Btn_CloseFindRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCloseFindRoomClicked);
+
+	if (Btn_Refresh)
+		Btn_Refresh->OnClicked.AddDynamic(this, &UUIMenu::OnRefreshRoomsClicked);
+
+	if (CheckBox_All)
+		CheckBox_All->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxAllClicked);
+
+	if (CheckBox_1V1)
+		CheckBox_1V1->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBox1V1Clicked);
+
+	if (CheckBox_2V2)
+		CheckBox_2V2->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBox2V2Clicked);
+
+	if (CheckBox_FFA)
+		CheckBox_FFA->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxFFAClicked);
+
+
 	// Afficher le menu principal au démarrage
 	ShowMainMenu();
 
@@ -112,6 +133,8 @@ void UUIMenu::OnFindRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Find Room clicked"));
 
+	ShowFindRoom();
+	OnCheckBoxAllClicked(true);
 	//TODO: Chercher les rooms disponibles
 }
 
@@ -255,38 +278,179 @@ void UUIMenu::OnUnitCountChanged(FString SelectedItem, ESelectInfo::Type Selecti
 	UE_LOG(LogTemp, Log, TEXT("Unit Count changed to: %d"), SelectedUnitCount);
 }
 
+void UUIMenu::OnCloseFindRoomClicked()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Close FindRoomSettings clicked"));
+	ShowMainMenu();
+	OnCheckBoxAllClicked(true);
+}
+
+void UUIMenu::OnCheckBoxAllClicked(bool bIsChecked)
+{
+	UE_LOG(LogTemp, Warning, TEXT("ALL clicked"));
+
+	bCheckBoxAll = true;
+	bCheckBox1V1 = false;
+	bCheckBox2V2 = false;
+	bCheckBoxFFA = false;
+
+	CheckBox_All->SetIsChecked(bCheckBoxAll);
+	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
+	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
+	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+}
+
+void UUIMenu::OnCheckBox1V1Clicked(bool bIsChecked)
+{
+	UE_LOG(LogTemp, Warning, TEXT("1V1 clicked"));
+
+	bCheckBoxAll = false;
+	bCheckBox1V1 = true;
+	if (bCheckBox2V2 && bCheckBoxFFA)
+	{
+		bCheckBoxAll = true;
+		bCheckBox1V1 = false;
+		bCheckBox2V2 = false;
+		bCheckBoxFFA = false;
+	}
+
+	CheckBox_All->SetIsChecked(bCheckBoxAll);
+	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
+	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
+	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+}
+
+void UUIMenu::OnCheckBox2V2Clicked(bool bIsChecked)
+{
+	UE_LOG(LogTemp, Warning, TEXT("2V2 clicked"));
+
+	bCheckBoxAll = false;
+	bCheckBox2V2 = true;
+	if (bCheckBox1V1 && bCheckBoxFFA)
+	{
+		bCheckBoxAll = true;
+		bCheckBox1V1 = false;
+		bCheckBox2V2 = false;
+		bCheckBoxFFA = false;
+	}
+
+	CheckBox_All->SetIsChecked(bCheckBoxAll);
+	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
+	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
+	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+}
+
+void UUIMenu::OnCheckBoxFFAClicked(bool bIsChecked)
+{
+	UE_LOG(LogTemp, Warning, TEXT("FFA clicked"));
+
+	bCheckBoxAll = false;
+	bCheckBoxFFA = true;
+	if (bCheckBox1V1 && bCheckBox2V2)
+	{
+		bCheckBoxAll = true;
+		bCheckBox1V1 = false;
+		bCheckBox2V2 = false;
+		bCheckBoxFFA = false;
+	}
+
+	CheckBox_All->SetIsChecked(bCheckBoxAll);
+	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
+	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
+	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+}
+
+void UUIMenu::OnRefreshRoomsClicked()
+{
+	//TODO DELETE ROOMS AND FIND NEW ROOMS WITH FILTERS
+
+	if (FindRoomScrollBox)
+		FindRoomScrollBox->ClearChildren();
+
+	RoomInfosUI.Empty();
+}
+
 // === FONCTIONS UTILITAIRES ===
 
 void UUIMenu::ShowMainMenu()
 {
 	if (MenuPanel)
-	{
 		MenuPanel->SetVisibility(ESlateVisibility::Visible);
-	}
 
 	if (CreateRoomSettings)
-	{
 		CreateRoomSettings->SetVisibility(ESlateVisibility::Collapsed);
-	}
+
+	if (FindRoom)
+		FindRoom->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UUIMenu::ShowCreateRoomSettings()
 {
 	if (MenuPanel)
-	{
 		MenuPanel->SetVisibility(ESlateVisibility::Collapsed);
-	}
+
+	if (FindRoom)
+		FindRoom->SetVisibility(ESlateVisibility::Collapsed);
 
 	if (CreateRoomSettings)
-	{
 		CreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
-	}
 
 	// Reset le statut
 	if (Txt_Status)
 	{
 		Txt_Status->SetText(FText::FromString(TEXT("Room Status : Closed")));
 		Txt_Status->SetColorAndOpacity(FLinearColor::Red);
+	}
+}
+
+void UUIMenu::ShowFindRoom()
+{
+	if (MenuPanel)
+		MenuPanel->SetVisibility(ESlateVisibility::Collapsed);
+
+	if (FindRoom)
+		FindRoom->SetVisibility(ESlateVisibility::Visible);
+
+	if (CreateRoomSettings)
+		CreateRoomSettings->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+//RoomMode ID => 0 = 1V1 | 1 = 2V2 | 2 = FFA
+void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing)
+{
+	if (FindRoomScrollBox && RoomInfoWidgetClass)
+	{
+		URoomInfoTemplate* RoomInfoWidget = CreateWidget<URoomInfoTemplate>(GetWorld(), RoomInfoWidgetClass);
+
+		if (RoomInfoWidget)
+		{
+			RoomInfoWidget->RoomName = RoomName;
+
+			if(RoomModeID <= 2 && RoomModeID >= 0)
+				RoomInfoWidget->RoomModeID = RoomModeID;
+
+			switch (RoomModeID)
+			{
+			case 0:
+				RoomInfoWidget->RoomModeText = "GameMode : 1V1";
+				break;
+			case 1:
+				RoomInfoWidget->RoomModeText = "GameMode : 2V2";
+				break;
+			case 2:
+				RoomInfoWidget->RoomModeText = "GameMode : FFA";
+				break;
+			default:
+				break;
+			}
+			RoomInfoWidget->PlayerInRoom = PlayerInRoom;
+			RoomInfoWidget->MaxPlayerInRoom = MaxPlayerInRoom;
+			RoomInfoWidget->PlayersText = FString::Printf(TEXT("Players : %d/%d"), PlayerInRoom, MaxPlayerInRoom);
+			RoomInfoWidget->RoomPing = RoomPing;
+
+			FindRoomScrollBox->AddChild(RoomInfoWidget);
+			RoomInfosUI.Add(RoomInfoWidget);
+		}
 	}
 }
 
