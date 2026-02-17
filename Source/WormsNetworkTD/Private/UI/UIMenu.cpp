@@ -134,6 +134,7 @@ void UUIMenu::OnFindRoomClicked()
 	UE_LOG(LogTemp, Warning, TEXT("Find Room clicked"));
 
 	ShowFindRoom();
+	OnCheckBoxAllClicked(true);
 	//TODO: Chercher les rooms disponibles
 }
 
