@@ -8,7 +8,10 @@
 #include "Components/CanvasPanel.h"
 #include "Components/Overlay.h"
 #include "Components/VerticalBox.h"
+#include "Components/CheckBox.h"
+#include "Components/ScrollBox.h"
 #include "UI/UserInfoTemplate.h"
+#include "UI/RoomInfoTemplate.h"
 #include "UIMenu.generated.h"
 
 
@@ -88,6 +91,50 @@ public:
 	TArray<TObjectPtr<UUserInfoTemplate>> PlayersInfosUI;
 
 
+	// === FIND ROOM SETTINGS === //
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Btn_CloseFindRoom;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Btn_Refresh;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UCheckBox> CheckBox_All;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UCheckBox> CheckBox_1V1;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UCheckBox> CheckBox_2V2;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UCheckBox> CheckBox_FFA;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UScrollBox> FindRoomScrollBox;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UUserWidget> RoomInfoWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TArray<TObjectPtr<URoomInfoTemplate>> RoomInfosUI;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UOverlay> FindRoom;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	bool bCheckBoxAll;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	bool bCheckBox1V1;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	bool bCheckBox2V2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	bool bCheckBoxFFA;
+
 	// Variables pour stocker les choix
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
 	FString SelectedGameMode = "1v1";
@@ -145,6 +192,31 @@ public:
 	UFUNCTION()
 	void OnUnitCountChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
+
+
+	// === CALLBACKS FIND ROOM ===
+	UFUNCTION()
+	void OnCloseFindRoomClicked();
+
+	UFUNCTION()
+	void OnCheckBoxAllClicked(bool bIsChecked);
+
+	UFUNCTION()
+	void OnCheckBox1V1Clicked(bool bIsChecked);
+
+	UFUNCTION()
+	void OnCheckBox2V2Clicked(bool bIsChecked);
+
+	UFUNCTION()
+	void OnCheckBoxFFAClicked(bool bIsChecked);
+
+	UFUNCTION()
+	void OnRefreshRoomsClicked();
+
+
+
+
+
 	// === FONCTIONS UTILITAIRES ===
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void SetupMenu();
@@ -157,4 +229,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void ShowCreateRoomSettings();
+
+	UFUNCTION(BlueprintCallable, Category = "Menu")
+	void ShowFindRoom();
+
+	UFUNCTION(BlueprintCallable, Category = "Room")
+	void AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing);
 };
