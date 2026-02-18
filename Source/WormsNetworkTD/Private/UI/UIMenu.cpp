@@ -9,7 +9,11 @@
 void UUIMenu::NativeConstruct()
 {
 	Super::NativeConstruct();
-
+	SessionSubsystem = GetGameInstance()->GetSubsystem<UOnlineSessionSubsystem>();
+	if (SessionSubsystem)
+	{
+		SessionSubsystem->OnFindSessionsCompleteEvent.AddDynamic(this, &UUIMenu::HandleFindSessionsCompleted);
+	}
 	SetupMenu();
 }
 
@@ -103,7 +107,7 @@ void UUIMenu::SetupMenu()
 		CheckBox_FFA->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxFFAClicked);
 
 
-	// Afficher le menu principal au démarrage
+	// Afficher le menu principal au dï¿½marrage
 	ShowMainMenu();
 
 	// Afficher le curseur
@@ -125,8 +129,12 @@ void UUIMenu::OnCreateRoomClicked()
 void UUIMenu::OnJoinRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Join Room clicked"));
-
-	//TODO: Menu pour joindre une room
+	if (!FoundSessions.IsValidIndex(SelectedSessionIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No session selected."));
+		return;
+	}
+	SessionSubsystem->CustomJoinSession(FoundSessions[SelectedSessionIndex], 7787, true);
 }
 
 void UUIMenu::OnFindRoomClicked()
@@ -135,7 +143,7 @@ void UUIMenu::OnFindRoomClicked()
 
 	ShowFindRoom();
 	OnCheckBoxAllClicked(true);
-	//TODO: Chercher les rooms disponibles
+	SessionSubsystem->FindSessions(10000, true);
 }
 
 void UUIMenu::OnSettingsClicked()
@@ -167,8 +175,16 @@ void UUIMenu::OnOpenRoomClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Open Room clicked - GameMode: %s, Turns: %d, Life: %d, Count: %d"),
 		*SelectedGameMode, SelectedTurnsBeforeWater, SelectedUnitLife, SelectedUnitCount);
-
-	// TODO: Créer la session réseau avec les paramètres choisis
+	int32 MaxPlayers = GetMaxPlayersFromGameMode();
+	SessionSubsystem->CreateSession(
+		TEXT("MyGameSession"),
+		MaxPlayers,
+		true,
+		SelectedGameMode,
+		SelectedUnitLife,
+		SelectedUnitCount,
+		SelectedTurnsBeforeWater
+	);
 
 	if (Txt_Status)
 	{
@@ -245,6 +261,8 @@ void UUIMenu::OnCloseRoomClicked()
 	if (Btn_CloseRoom)
 		Btn_CloseRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
 
+	FoundSessions.Empty();
+	SessionSubsystem->DestroySession();
 }
 
 void UUIMenu::OnStartGameClicked()
@@ -362,12 +380,18 @@ void UUIMenu::OnCheckBoxFFAClicked(bool bIsChecked)
 
 void UUIMenu::OnRefreshRoomsClicked()
 {
-	//TODO DELETE ROOMS AND FIND NEW ROOMS WITH FILTERS
+	if (SessionSubsystem)
+	{
+		// On vide juste l'UI ici
+		if (FindRoomScrollBox)
+		{
+			FindRoomScrollBox->ClearChildren();
+			RoomInfosUI.Empty();
+		}
 
-	if (FindRoomScrollBox)
-		FindRoomScrollBox->ClearChildren();
-
-	RoomInfosUI.Empty();
+		// On lance UNE recherche
+		SessionSubsystem->FindSessions(10000, true);
+	}
 }
 
 // === FONCTIONS UTILITAIRES ===
@@ -463,4 +487,83 @@ void UUIMenu::CloseMenu()
 		PC->bShowMouseCursor = false;
 		PC->SetInputMode(FInputModeGameOnly());
 	}
+}
+
+int32 UUIMenu::GetMaxPlayersFromGameMode() const
+{
+	if (SelectedGameMode == "1V1")
+	{
+		return 2;
+	}
+	else if (SelectedGameMode == "2V2")
+	{
+		return 4;
+	}
+	else if (SelectedGameMode == "FFA")
+	{
+		return 4;
+	}
+	return 2; // sï¿½curitï¿½ par dï¿½faut
+}
+
+void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sessions, bool bWasSuccessful)
+{
+	if (!bWasSuccessful)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed"));
+		return;
+	}
+
+	FoundSessions = Sessions;
+
+	// Ici on reconstruit UNIQUEMENT l'UI
+	if (!FindRoomScrollBox) return;
+
+	FindRoomScrollBox->ClearChildren();
+	RoomInfosUI.Empty();
+
+	for (int32 i = 0; i < FoundSessions.Num(); i++)
+	{
+		const FCustomSessionInfo& Session = FoundSessions[i];
+
+		if (!PassFilter(Session))
+			continue;
+
+		AddRoomInfoUI(
+			Session.SessionName,
+			ConvertGameModeToID(Session.GameMode),
+			Session.CurrentPlayers,
+			Session.MaxPlayers,
+			Session.Ping
+		);
+	}
+}
+
+int32 UUIMenu::ConvertGameModeToID(const FString& GameMode) const
+{
+	if (GameMode == "1V1")
+		return 0;
+	if (GameMode == "2V2")
+		return 1;
+	if (GameMode == "FFA")
+		return 2;
+
+	return 0;
+}
+
+bool UUIMenu::PassFilter(const FCustomSessionInfo& Session) const
+{
+	if (bCheckBoxAll)
+		return true;
+
+	if (bCheckBox1V1 && Session.GameMode == "1V1")
+		return true;
+
+	if (bCheckBox2V2 && Session.GameMode == "2V2")
+		return true;
+
+	if (bCheckBoxFFA && Session.GameMode == "FFA")
+		return true;
+
+	return false;
 }

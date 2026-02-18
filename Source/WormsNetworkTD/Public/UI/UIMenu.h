@@ -12,6 +12,7 @@
 #include "Components/ScrollBox.h"
 #include "UI/UserInfoTemplate.h"
 #include "UI/RoomInfoTemplate.h"
+#include "Network/OnlineSessionSubsystem.h"
 #include "UIMenu.generated.h"
 
 
@@ -148,8 +149,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
 	int32 SelectedUnitCount = 1;
 
-
-
+	// Game instance pour acc�der au subsystem
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UOnlineSessionSubsystem> SessionSubsystem;
 
 	// === CALLBACKS MENU PRINCIPAL ===
 	UFUNCTION()
@@ -235,4 +237,19 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Room")
 	void AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing);
+
+	UFUNCTION()
+	int32 GetMaxPlayersFromGameMode() const;
+
+	//FIND ROOM
+	TArray<FCustomSessionInfo> FoundSessions;
+	int32 SelectedSessionIndex = INDEX_NONE;
+	UFUNCTION()
+	void HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sessions, bool bWasSuccessful);
+
+	UFUNCTION()
+	int32 ConvertGameModeToID(const FString& GameMode) const;
+
+	UFUNCTION()
+	bool PassFilter(const FCustomSessionInfo& Session) const;
 };

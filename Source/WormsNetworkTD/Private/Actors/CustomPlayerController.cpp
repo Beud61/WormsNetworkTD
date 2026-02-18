@@ -21,7 +21,8 @@ void ACustomPlayerController::BeginPlay()
 	}
 
 	MyPlayer = Cast<ACustomPaperCharacter>(GetPawn());
-	ShowMainMenu();
+	if (IsLocalController())
+		ShowMainMenu();
 }
 
 void ACustomPlayerController::Tick(float DeltaTime)
