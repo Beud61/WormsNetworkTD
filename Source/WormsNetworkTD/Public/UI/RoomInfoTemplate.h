@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "RoomInfoTemplate.generated.h"
 
 /**
@@ -36,6 +37,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room Info")
 	int32 MaxPlayerInRoom = 2;
+
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Btn_JoinLobby;
 
 	//To Update the UI Ingame when values change
 	UFUNCTION(BlueprintNativeEvent)

@@ -119,6 +119,7 @@ void UUIMenu::SetupMenu()
 }
 
 // === CALLBACKS MENU PRINCIPAL ===
+#pragma region CALLBACKS MENU PRINCIPAL
 
 void UUIMenu::OnCreateRoomClicked()
 {
@@ -163,7 +164,11 @@ void UUIMenu::OnQuitClicked()
 	}
 }
 
+#pragma endregion
+
 // === CALLBACKS CREATE ROOM SETTINGS ===
+
+#pragma region CALLBACKS CREATE ROOM SETTINGS
 
 void UUIMenu::OnCloseCreateRoomSettingsClicked()
 {
@@ -272,6 +277,14 @@ void UUIMenu::OnStartGameClicked()
 	//Travel to Selected Map
 }
 
+void UUIMenu::OnQuitLobbyClicked()
+{
+	//TODO Remove player from session
+
+	UE_LOG(LogTemp, Warning, TEXT("Quit Lobby clicked"));
+	ShowMainMenu();
+}
+
 void UUIMenu::OnGameModeChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
 {
 	SelectedGameMode = SelectedItem;
@@ -295,6 +308,11 @@ void UUIMenu::OnUnitCountChanged(FString SelectedItem, ESelectInfo::Type Selecti
 	SelectedUnitCount = FCString::Atoi(*SelectedItem);
 	UE_LOG(LogTemp, Log, TEXT("Unit Count changed to: %d"), SelectedUnitCount);
 }
+
+#pragma endregion
+
+
+#pragma region CALLBACKS FIND ROOM
 
 void UUIMenu::OnCloseFindRoomClicked()
 {
@@ -394,7 +412,18 @@ void UUIMenu::OnRefreshRoomsClicked()
 	}
 }
 
+void UUIMenu::OnJoinLobbyClicked()
+{
+	//TODO Apply logic to join lobby
+
+	HideRoomSettingsForJoiningPlayer();
+}
+
+#pragma endregion
+
 // === FONCTIONS UTILITAIRES ===
+
+#pragma region Utilities
 
 void UUIMenu::ShowMainMenu()
 {
@@ -419,6 +448,18 @@ void UUIMenu::ShowCreateRoomSettings()
 	if (CreateRoomSettings)
 		CreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
 
+	if (HostSettingsSecurity)
+		HostSettingsSecurity->SetVisibility(ESlateVisibility::Collapsed);
+
+	if (Btn_QuitLobby)
+		Btn_QuitLobby->SetVisibility(ESlateVisibility::Collapsed);
+
+	if (Btn_StartGame)
+		Btn_StartGame->SetVisibility(ESlateVisibility::Visible);
+
+	if (Btn_CloseCreateRoomSettings)
+		Btn_CloseCreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
+
 	// Reset le statut
 	if (Txt_Status)
 	{
@@ -437,6 +478,33 @@ void UUIMenu::ShowFindRoom()
 
 	if (CreateRoomSettings)
 		CreateRoomSettings->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UUIMenu::HideRoomSettingsForJoiningPlayer()
+{
+	ShowCreateRoomSettings();
+
+	if (HostSettingsSecurity)
+		HostSettingsSecurity->SetVisibility(ESlateVisibility::Visible);
+
+	if (Btn_QuitLobby)
+	{
+		Btn_QuitLobby->SetVisibility(ESlateVisibility::Visible);
+		Btn_QuitLobby->OnClicked.AddDynamic(this, &UUIMenu::OnQuitLobbyClicked);
+	}
+
+	if (Btn_StartGame)
+		Btn_StartGame->SetVisibility(ESlateVisibility::Collapsed);
+
+	if (Btn_CloseCreateRoomSettings)
+		Btn_CloseCreateRoomSettings->SetVisibility(ESlateVisibility::Collapsed);
+
+	if (Txt_Status)
+	{
+		Txt_Status->SetText(FText::FromString(TEXT("Room Status : Open")));
+		Txt_Status->SetColorAndOpacity(FLinearColor::Green);
+	}
+
 }
 
 //RoomMode ID => 0 = 1V1 | 1 = 2V2 | 2 = FFA
@@ -472,8 +540,12 @@ void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRo
 			RoomInfoWidget->PlayersText = FString::Printf(TEXT("Players : %d/%d"), PlayerInRoom, MaxPlayerInRoom);
 			RoomInfoWidget->RoomPing = RoomPing;
 
+			if (RoomInfoWidget->Btn_JoinLobby)
+				RoomInfoWidget->Btn_JoinLobby->OnClicked.AddDynamic(this, &UUIMenu::OnJoinLobbyClicked);
+
 			FindRoomScrollBox->AddChild(RoomInfoWidget);
 			RoomInfosUI.Add(RoomInfoWidget);
+
 		}
 	}
 }
@@ -567,3 +639,5 @@ bool UUIMenu::PassFilter(const FCustomSessionInfo& Session) const
 
 	return false;
 }
+
+#pragma endregion
