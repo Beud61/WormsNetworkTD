@@ -21,6 +21,8 @@ struct FCustomSessionInfo
 	int32 Ping = 0;
 	UPROPERTY(BlueprintReadOnly)
 	int32 SessionSearchResultIndex = 0;
+	UPROPERTY(BlueprintReadOnly)
+	FString GameMode = "";
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFindGameSessionsComplete, const TArray<FCustomSessionInfo>&, SessionResults, bool, Successful);
@@ -58,7 +60,7 @@ public:
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Session")
-	void CreateSession(const FString& SessionName, int32 NumPublicConnections, bool isLanMatch);
+	void CreateSession(const FString& SessionName, int32 NumPublicConnections, bool isLanMatch, const FString& GameMode, int32 UnitLife, int32 UnitCount, int32 TurnsBeforeWater);
 	UFUNCTION(BlueprintCallable, Category = "Session")
 	void FindSessions(int32 MaxSearchResults, bool IsLANQuery);
 	UPROPERTY(BlueprintAssignable, Category = "Session")

@@ -1,5 +1,4 @@
 #include "Beacon/LobbyBeaconHostObject.h"
-#include "Beacon/LobbyBeaconClient.h"
 
 ALobbyBeaconHostObject::ALobbyBeaconHostObject(const FObjectInitializer& Initializer) : Super(Initializer)
 {
@@ -16,9 +15,40 @@ void ALobbyBeaconHostObject::OnClientConnected(AOnlineBeaconClient* NewClientAct
 	}
 	else
 		UE_LOG(LogTemp, Warning, TEXT("CONNECTED CLIENT INVALID"));
+	ALobbyBeaconClient* LobbyClient = Cast<ALobbyBeaconClient>(NewClientActor);
+	if (LobbyClient)
+	{
+		ConnectedClients.Add(LobbyClient);
+		UE_LOG(LogTemp, Warning, TEXT("CLIENT ADDED TO ConnectedClients"));
+	}
 }
 
 AOnlineBeaconClient* ALobbyBeaconHostObject::SpawnBeaconActor(UNetConnection* ClientConnection)
 {
 	return Super::SpawnBeaconActor(ClientConnection);
+}
+
+void ALobbyBeaconHostObject::RegisterOrUpdatePlayer(const FPlayerLobbyInfo& PlayerInfo)
+{
+	int32 Index = ConnectedPlayers.IndexOfByPredicate(
+		[&](const FPlayerLobbyInfo& P)
+		{
+			return P.PlayerId == PlayerInfo.PlayerId;
+		});
+	if (Index != INDEX_NONE)
+		ConnectedPlayers[Index] = PlayerInfo;
+	else
+		ConnectedPlayers.Add(PlayerInfo);
+	BroadcastLobbyUpdate();
+}
+
+void ALobbyBeaconHostObject::BroadcastLobbyUpdate()
+{
+	for (ALobbyBeaconClient* Client : ConnectedClients)
+	{
+		if (Client)
+		{
+			Client->Client_ReceiveLobbyUpdate(ConnectedPlayers);
+		}
+	}
 }
