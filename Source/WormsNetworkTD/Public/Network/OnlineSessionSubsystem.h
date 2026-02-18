@@ -79,4 +79,11 @@ public:
 
 	UPROPERTY(BlueprintCallable)
 	FOnSessionJoinCompleted OnSessionJoinCompleted;
+
+	UPROPERTY()
+	ALobbyBeaconClient* LobbyBeaconClient = nullptr;
+	UFUNCTION()
+	ALobbyBeaconClient* GetLobbyBeaconClient() const { return LobbyBeaconClient; }
+	UFUNCTION()
+	void SetLobbyBeaconClient(ALobbyBeaconClient* NewClient) { LobbyBeaconClient = NewClient; }
 };

@@ -5,6 +5,7 @@
 #include "Components/CanvasPanel.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Beacon/LobbyBeaconClient.h"
 
 void UUIMenu::NativeConstruct()
 {
@@ -13,6 +14,10 @@ void UUIMenu::NativeConstruct()
 	if (SessionSubsystem)
 	{
 		SessionSubsystem->OnFindSessionsCompleteEvent.AddDynamic(this, &UUIMenu::HandleFindSessionsCompleted);
+	}
+	if (ALobbyBeaconClient* BeaconClient = SessionSubsystem->GetLobbyBeaconClient())
+	{
+		BeaconClient->OnLobbyUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
 	}
 	SetupMenu();
 }
@@ -133,9 +138,10 @@ void UUIMenu::OnJoinRoomClicked()
 	if (!FoundSessions.IsValidIndex(SelectedSessionIndex))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("No session selected."));
-		return;
+		//return;
 	}
-	SessionSubsystem->CustomJoinSession(FoundSessions[SelectedSessionIndex], 7787, true);
+	bIsQuickJoin = true;
+	SessionSubsystem->FindSessions(10000, true);
 }
 
 void UUIMenu::OnFindRoomClicked()
@@ -412,10 +418,12 @@ void UUIMenu::OnRefreshRoomsClicked()
 	}
 }
 
-void UUIMenu::OnJoinLobbyClicked()
+void UUIMenu::OnJoinLobbyClicked(int32 Index)
 {
-	//TODO Apply logic to join lobby
-
+	if (!FoundSessions.IsValidIndex(Index))
+		return;
+	SelectedSessionIndex = Index;
+	SessionSubsystem->CustomJoinSession(FoundSessions[SelectedSessionIndex], 7787, true);
 	HideRoomSettingsForJoiningPlayer();
 }
 
@@ -508,7 +516,7 @@ void UUIMenu::HideRoomSettingsForJoiningPlayer()
 }
 
 //RoomMode ID => 0 = 1V1 | 1 = 2V2 | 2 = FFA
-void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing)
+void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing, int32 SessionIndex)
 {
 	if (FindRoomScrollBox && RoomInfoWidgetClass)
 	{
@@ -539,9 +547,9 @@ void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRo
 			RoomInfoWidget->MaxPlayerInRoom = MaxPlayerInRoom;
 			RoomInfoWidget->PlayersText = FString::Printf(TEXT("Players : %d/%d"), PlayerInRoom, MaxPlayerInRoom);
 			RoomInfoWidget->RoomPing = RoomPing;
-
+			RoomInfoWidget->SessionIndex = SessionIndex;
 			if (RoomInfoWidget->Btn_JoinLobby)
-				RoomInfoWidget->Btn_JoinLobby->OnClicked.AddDynamic(this, &UUIMenu::OnJoinLobbyClicked);
+				RoomInfoWidget->OnJoinClicked.AddDynamic(this, &UUIMenu::OnJoinLobbyClicked);
 
 			FindRoomScrollBox->AddChild(RoomInfoWidget);
 			RoomInfosUI.Add(RoomInfoWidget);
@@ -588,6 +596,19 @@ void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sess
 
 	FoundSessions = Sessions;
 
+	if (bIsQuickJoin)
+	{
+		bIsQuickJoin = false;
+		if (FoundSessions.Num() > 0)
+		{
+			SessionSubsystem->CustomJoinSession(FoundSessions[0], 7787, true);
+			HideRoomSettingsForJoiningPlayer();
+		}
+		else
+			UE_LOG(LogTemp, Warning, TEXT("No sessions found for Quick Join"));
+		return;
+	}
+
 	// Ici on reconstruit UNIQUEMENT l'UI
 	if (!FindRoomScrollBox) return;
 
@@ -606,7 +627,8 @@ void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sess
 			ConvertGameModeToID(Session.GameMode),
 			Session.CurrentPlayers,
 			Session.MaxPlayers,
-			Session.Ping
+			Session.Ping,
+			i
 		);
 	}
 }
@@ -638,6 +660,56 @@ bool UUIMenu::PassFilter(const FCustomSessionInfo& Session) const
 		return true;
 
 	return false;
+}
+
+void UUIMenu::AddPlayerInfoUI(const FPlayerLobbyInfo& PlayerInfo)
+{
+	if (VB_PlayersInfos && PLayerInfoWidgetClass)
+	{
+		UUserInfoTemplate* PlayerInfoWidget = CreateWidget<UUserInfoTemplate>(GetWorld(), PLayerInfoWidgetClass);
+		if (PlayerInfoWidget)
+		{
+			PlayerInfoWidget->PlayerName = PlayerInfo.PlayerName;
+			PlayerInfoWidget->UnitNB = PlayerInfo.UnitNB;
+			PlayerInfoWidget->ProfileIcon = PlayerInfo.ProfileIcon;
+			PlayerInfoWidget->TeamIcon = PlayerInfo.TeamIcon;
+
+			VB_PlayersInfos->AddChild(PlayerInfoWidget);
+			PlayersInfosUI.Add(PlayerInfoWidget);
+
+			//// Mise à jour du compteur de joueurs
+			//if (Txt_PlayerNb)
+			//{
+			//	int32 CurrentPlayers = PlayersInfosUI.Num();
+			//	int32 tmpMaxPlayer = FString::Printf(TEXT("%d/%d"), CurrentPlayers,GetMaxPlayersFromGameMode());
+			//	Txt_PlayerNb->SetText(FText::FromString(tmpMaxPlayer));
+			//}
+		}
+	}
+}
+
+void UUIMenu::HandleLobbyUpdated(const TArray<FPlayerLobbyInfo>& Players)
+{
+	// Clear current UI
+	if (VB_PlayersInfos)
+	{
+		VB_PlayersInfos->ClearChildren();
+		PlayersInfosUI.Empty();
+
+		for (const FPlayerLobbyInfo& Player : Players)
+		{
+			AddPlayerInfoUI(Player);
+		}
+	}
+
+	// Update player count text
+	if (Txt_PlayerNb)
+	{
+		int32 CurrentPlayers = Players.Num();
+		int32 MaxPlayers = GetMaxPlayersFromGameMode();
+		FString Tmp = FString::Printf(TEXT("%d/%d"), CurrentPlayers, MaxPlayers);
+		Txt_PlayerNb->SetText(FText::FromString(Tmp));
+	}
 }
 
 #pragma endregion

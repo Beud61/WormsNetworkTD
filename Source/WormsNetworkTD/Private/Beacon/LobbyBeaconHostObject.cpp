@@ -9,17 +9,23 @@ ALobbyBeaconHostObject::ALobbyBeaconHostObject(const FObjectInitializer& Initial
 void ALobbyBeaconHostObject::OnClientConnected(AOnlineBeaconClient* NewClientActor, UNetConnection* ClientConnection)
 {
 	Super::OnClientConnected(NewClientActor, ClientConnection);
+
 	if (NewClientActor)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("CONNECTED CLIENT VALID"));
 	}
 	else
+	{
 		UE_LOG(LogTemp, Warning, TEXT("CONNECTED CLIENT INVALID"));
+	}
+
 	ALobbyBeaconClient* LobbyClient = Cast<ALobbyBeaconClient>(NewClientActor);
 	if (LobbyClient)
 	{
 		ConnectedClients.Add(LobbyClient);
 		UE_LOG(LogTemp, Warning, TEXT("CLIENT ADDED TO ConnectedClients"));
+		// Send current lobby info to the new client
+		LobbyClient->Client_ReceiveLobbyUpdate(ConnectedPlayers);
 	}
 }
 
@@ -35,10 +41,16 @@ void ALobbyBeaconHostObject::RegisterOrUpdatePlayer(const FPlayerLobbyInfo& Play
 		{
 			return P.PlayerId == PlayerInfo.PlayerId;
 		});
+
 	if (Index != INDEX_NONE)
+	{
 		ConnectedPlayers[Index] = PlayerInfo;
+	}
 	else
+	{
 		ConnectedPlayers.Add(PlayerInfo);
+	}
+
 	BroadcastLobbyUpdate();
 }
 

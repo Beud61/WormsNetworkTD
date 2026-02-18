@@ -11,7 +11,14 @@ void ALobbyBeaconClient::OnConnected()
 	Super::OnConnected();
 	UE_LOG(LogTemp, Warning, TEXT("CONNECTED TO HOST BEACON"));
 	const ULocalPlayer* LocalPlayer = Cast<ULocalPlayer>(GetWorld()->GetFirstLocalPlayerFromController());
-	Server_RequestReservation(LocalPlayer->GetPreferredUniqueNetId());
+	if (LocalPlayer)
+	{
+		Server_RequestReservation(LocalPlayer->GetPreferredUniqueNetId());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("No LocalPlayer found!"));
+	}
 }
 
 void ALobbyBeaconClient::OnFailure()
@@ -25,6 +32,7 @@ bool ALobbyBeaconClient::ConnectToServer(FURL& Url)
 	return InitClient(Url);
 }
 
+// ---- Reservation ----
 void ALobbyBeaconClient::Server_RequestReservation_Implementation(const FUniqueNetIdRepl& PlayerNetId)
 {
 	ALobbyBeaconHostObject* Host = Cast<ALobbyBeaconHostObject>(GetBeaconOwner());
@@ -38,6 +46,7 @@ void ALobbyBeaconClient::Server_RequestReservation_Implementation(const FUniqueN
 		Client_ReservationDenied();
 		return;
 	}
+
 	Host->ReservedSlots++;
 	Client_ReservationAccepted();
 }
@@ -54,6 +63,7 @@ void ALobbyBeaconClient::Client_ReservationDenied_Implementation()
 	OnRequestValidate.Execute(false);
 }
 
+// ---- Lobby Info ----
 void ALobbyBeaconClient::Server_SendLobbyInfo_Implementation(const FPlayerLobbyInfo& PlayerInfo)
 {
 	if (ALobbyBeaconHostObject* Host = Cast<ALobbyBeaconHostObject>(GetBeaconOwner()))
@@ -65,4 +75,9 @@ void ALobbyBeaconClient::Server_SendLobbyInfo_Implementation(const FPlayerLobbyI
 void ALobbyBeaconClient::Client_ReceiveLobbyUpdate_Implementation(const TArray<FPlayerLobbyInfo>& Players)
 {
 	OnLobbyUpdated.Broadcast(Players);
+}
+
+void ALobbyBeaconClient::AddPlayerAndBroadcast(const FPlayerLobbyInfo& PlayerInfo)
+{
+	OnLobbyUpdated.Broadcast({ PlayerInfo });
 }

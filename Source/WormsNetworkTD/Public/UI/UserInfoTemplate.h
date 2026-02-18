@@ -21,4 +21,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Info")
     FString PlayerName;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Info")
+	int32 ProfileIcon;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Info")
+	int32 TeamIcon;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Info")
+	int32 PlayerId;
+
 };

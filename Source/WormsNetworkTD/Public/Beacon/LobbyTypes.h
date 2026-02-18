@@ -12,6 +12,9 @@ struct FPlayerLobbyInfo
 	FString PlayerName;
 
 	UPROPERTY(BlueprintReadWrite)
+	int32 UnitNB;
+
+	UPROPERTY(BlueprintReadWrite)
 	TArray<FString> UnitNames;
 
 	UPROPERTY(BlueprintReadWrite)

@@ -14,8 +14,10 @@
 #include "UI/UserInfoTemplate.h"
 #include "UI/RoomInfoTemplate.h"
 #include "Network/OnlineSessionSubsystem.h"
+#include "Beacon/LobbyTypes.h"
 #include "UIMenu.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerJoinedLobby, const FPlayerLobbyInfo&, PlayerInfo);
 
 UCLASS()
 class WORMSNETWORKTD_API UUIMenu : public UUserWidget
@@ -236,7 +238,7 @@ public:
 	void OnRefreshRoomsClicked();
 
 	UFUNCTION()
-	void OnJoinLobbyClicked();
+	void OnJoinLobbyClicked(int32 Index);
 
 
 
@@ -262,7 +264,7 @@ public:
 	void HideRoomSettingsForJoiningPlayer();
 
 	UFUNCTION(BlueprintCallable, Category = "Room")
-	void AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing);
+	void AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing, int32 SessionIndex);
 
 	UFUNCTION()
 	int32 GetMaxPlayersFromGameMode() const;
@@ -278,4 +280,13 @@ public:
 
 	UFUNCTION()
 	bool PassFilter(const FCustomSessionInfo& Session) const;
+
+	//JOIN ROOM
+	bool bIsQuickJoin = false;
+	UPROPERTY(BlueprintAssignable)
+	FOnPlayerJoinedLobby OnPlayerJoinedLobby;
+	UFUNCTION()
+	void AddPlayerInfoUI(const FPlayerLobbyInfo& PlayerInfo);
+	UFUNCTION()
+	void HandleLobbyUpdated(const TArray<FPlayerLobbyInfo>& Players);
 };
