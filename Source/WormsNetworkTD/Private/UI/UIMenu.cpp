@@ -316,8 +316,6 @@ void UUIMenu::OnCheckBoxAllClicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
-
-	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnCheckBox1V1Clicked(bool bIsChecked)
@@ -338,8 +336,6 @@ void UUIMenu::OnCheckBox1V1Clicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
-
-	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnCheckBox2V2Clicked(bool bIsChecked)
@@ -360,8 +356,6 @@ void UUIMenu::OnCheckBox2V2Clicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
-
-	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnCheckBoxFFAClicked(bool bIsChecked)
@@ -382,35 +376,21 @@ void UUIMenu::OnCheckBoxFFAClicked(bool bIsChecked)
 	CheckBox_1V1->SetIsChecked(bCheckBox1V1);
 	CheckBox_2V2->SetIsChecked(bCheckBox2V2);
 	CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
-
-	OnRefreshRoomsClicked();
 }
 
 void UUIMenu::OnRefreshRoomsClicked()
 {
-	//TODO DELETE ROOMS AND FIND NEW ROOMS WITH FILTERS
-
-	if (!FindRoomScrollBox) return;
-
-	FindRoomScrollBox->ClearChildren();
-	RoomInfosUI.Empty();
-
-	for (int32 i = 0; i < FoundSessions.Num(); i++)
+	if (SessionSubsystem)
 	{
-		const FCustomSessionInfo& Session = FoundSessions[i];
+		// On vide juste l'UI ici
+		if (FindRoomScrollBox)
+		{
+			FindRoomScrollBox->ClearChildren();
+			RoomInfosUI.Empty();
+		}
 
-		if (!PassFilter(Session))
-			continue;
-
-		AddRoomInfoUI(
-			Session.SessionName,
-			ConvertGameModeToID(Session.GameMode),
-			Session.CurrentPlayers,
-			Session.MaxPlayers,
-			Session.Ping
-		);
-
-		//RoomInfosUI.Last()->SessionIndex = i;
+		// On lance UNE recherche
+		SessionSubsystem->FindSessions(10000, true);
 	}
 }
 
@@ -535,7 +515,28 @@ void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sess
 	}
 
 	FoundSessions = Sessions;
-	OnRefreshRoomsClicked();
+
+	// Ici on reconstruit UNIQUEMENT l'UI
+	if (!FindRoomScrollBox) return;
+
+	FindRoomScrollBox->ClearChildren();
+	RoomInfosUI.Empty();
+
+	for (int32 i = 0; i < FoundSessions.Num(); i++)
+	{
+		const FCustomSessionInfo& Session = FoundSessions[i];
+
+		if (!PassFilter(Session))
+			continue;
+
+		AddRoomInfoUI(
+			Session.SessionName,
+			ConvertGameModeToID(Session.GameMode),
+			Session.CurrentPlayers,
+			Session.MaxPlayers,
+			Session.Ping
+		);
+	}
 }
 
 int32 UUIMenu::ConvertGameModeToID(const FString& GameMode) const

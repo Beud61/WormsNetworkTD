@@ -50,6 +50,15 @@ void UOnlineSessionSubsystem::OnCreateSessionCompleted(FName SessionName, bool S
 		Session->ClearOnCreateSessionCompleteDelegate_Handle(CreateHandle);
 	if (!Successful)
 		return;
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	if (LocalPlayer && Session.IsValid())
+	{
+		Session->RegisterPlayer(
+			NAME_GameSession,
+			*LocalPlayer->GetPreferredUniqueNetId(),
+			false
+		);
+	}
 	//GetWorld()->ServerTravel("/Game/Maps/Lobby?listen");
 }
 
