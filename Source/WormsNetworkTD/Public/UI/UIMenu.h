@@ -10,6 +10,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/CheckBox.h"
 #include "Components/ScrollBox.h"
+#include "Components/Image.h"
 #include "UI/UserInfoTemplate.h"
 #include "UI/RoomInfoTemplate.h"
 #include "UIMenu.generated.h"
@@ -45,6 +46,9 @@ public:
 	TObjectPtr<UButton> Btn_Quit;
 
 	// === CREATE ROOM SETTINGS ===
+
+	#pragma region Create Room UI Binds
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> CreateRoomSettings;
 
@@ -84,14 +88,23 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UVerticalBox> VB_PlayersInfos;
 
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> HostSettingsSecurity;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Btn_QuitLobby;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<UUserWidget> PLayerInfoWidgetClass;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TArray<TObjectPtr<UUserInfoTemplate>> PlayersInfosUI;
 
+	#pragma endregion
 
 	// === FIND ROOM SETTINGS === //
+
+	#pragma region Find Room UI Binds
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_CloseFindRoom;
@@ -134,6 +147,10 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	bool bCheckBoxFFA;
+
+#pragma endregion
+
+
 
 	// Variables pour stocker les choix
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
@@ -181,6 +198,9 @@ public:
 	void OnStartGameClicked();
 
 	UFUNCTION()
+	void OnQuitLobbyClicked();
+
+	UFUNCTION()
 	void OnGameModeChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
 	UFUNCTION()
@@ -213,6 +233,9 @@ public:
 	UFUNCTION()
 	void OnRefreshRoomsClicked();
 
+	UFUNCTION()
+	void OnJoinLobbyClicked();
+
 
 
 
@@ -232,6 +255,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void ShowFindRoom();
+
+	UFUNCTION(BlueprintCallable, Category = "Menu")
+	void HideRoomSettingsForJoiningPlayer();
 
 	UFUNCTION(BlueprintCallable, Category = "Room")
 	void AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing);
