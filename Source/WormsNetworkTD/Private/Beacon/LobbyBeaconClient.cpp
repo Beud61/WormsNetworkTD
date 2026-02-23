@@ -4,6 +4,7 @@
 
 ALobbyBeaconClient::ALobbyBeaconClient(const FObjectInitializer& Initializer) : Super(Initializer)
 {
+	UE_LOG(LogTemp, Warning, TEXT("BeaconClient CREATED %p"), this);
 }
 
 void ALobbyBeaconClient::OnConnected()
@@ -19,6 +20,7 @@ void ALobbyBeaconClient::OnConnected()
 	{
 		UE_LOG(LogTemp, Error, TEXT("No LocalPlayer found!"));
 	}
+	UE_LOG(LogTemp, Warning, TEXT("BeaconClient pointer: %p"), this);
 }
 
 void ALobbyBeaconClient::OnFailure()
@@ -53,8 +55,15 @@ void ALobbyBeaconClient::Server_RequestReservation_Implementation(const FUniqueN
 
 void ALobbyBeaconClient::Client_ReservationAccepted_Implementation()
 {
-	UE_LOG(LogTemp, Warning, TEXT("RESERVATION ACCEPTED"));
-	OnRequestValidate.Execute(true);
+	if (OnRequestValidate.IsBound())
+	{
+		OnRequestValidate.Execute(true);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("OnRequestValidate NOT BOUND"));
+	}
+	UE_LOG(LogTemp, Warning, TEXT("BeaconClient pointer: %p"), this);
 }
 
 void ALobbyBeaconClient::Client_ReservationDenied_Implementation()

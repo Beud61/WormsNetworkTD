@@ -136,6 +136,14 @@ void UOnlineSessionSubsystem::OnJoinSessionCompleted(FName SessionName, EOnJoinS
 		// Fallback PIE/Null OSS
 		ConnectString = FString::Printf(TEXT("127.0.0.1:%d"), 7787);
 	}
+	if (Result == EOnJoinSessionCompleteResult::Success)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("JoinSession SUCCESS"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("JoinSession FAILED"));
+	}
 
 	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 	if (PlayerController)
@@ -147,6 +155,7 @@ void UOnlineSessionSubsystem::OnJoinSessionCompleted(FName SessionName, EOnJoinS
 // ---- CUSTOM JOIN SESSION (BEACON) ----
 void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& SessionInfo, int32 BeaconPort, bool bPortOverride)
 {
+	UE_LOG(LogTemp, Error, TEXT("CustomJoinSession CALLED"));
 	if (!Session.IsValid() || !SearchResults.IsValidIndex(SessionInfo.SessionSearchResultIndex))
 	{
 		OnSessionJoinCompleted.Broadcast(false);
@@ -163,45 +172,60 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 	}
 
 	// Spawn Beacon client si pas déjà existant
-	if (!GetLobbyBeaconClient())
+	if (!LobbyBeaconClient)
 	{
-		ALobbyBeaconClient* BeaconClient = GetWorld()->SpawnActor<ALobbyBeaconClient>();
-		SetLobbyBeaconClient(BeaconClient);
+		LobbyBeaconClient = GetWorld()->SpawnActor<ALobbyBeaconClient>();
+		UE_LOG(LogTemp, Warning, TEXT("BeaconClient CREATED %p"), LobbyBeaconClient);
+
+		// Attendre que l'acteur soit pleinement initialisé
+		LobbyBeaconClient->SetActorHiddenInGame(true);
+		LobbyBeaconClient->SetActorEnableCollision(false);
+		LobbyBeaconClient->SetReplicates(true);
+
+		// --- BIND MENU AU BEACON ICI ---
+		if (ActiveMenu) // ActiveMenu = ton UUIMenu déjà créé
+		{
+			LobbyBeaconClient->OnLobbyUpdated.AddDynamic(ActiveMenu, &UUIMenu::HandleLobbyUpdated);
+			UE_LOG(LogTemp, Warning, TEXT("UUIMenu bound to Beacon OnLobbyUpdated"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Beacon already exists, skipping creation"));
 	}
 
-	ALobbyBeaconClient* BeaconClient = GetLobbyBeaconClient();
-	if (!BeaconClient)
+	// Connexion différée
+	
+	/*if (!LobbyBeaconClient)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Impossible de creer le BeaconClient"));
 		OnSessionJoinCompleted.Broadcast(false);
 		return;
-	}
+	}*/
+	//OnBeaconClientCreated.Broadcast(LobbyBeaconClient);
 
+	if (bBeaconConnecting)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Already connecting to beacon"));
+		return;
+	}
+	bBeaconConnecting = true;
 	// Destination URL
-	FURL Destination(nullptr, *ConnectString, ETravelType::TRAVEL_Absolute);
-	if (bPortOverride)
-		Destination.Port = BeaconPort;
+	FURL Destination(nullptr, TEXT("127.0.0.1"), TRAVEL_Absolute);
+	Destination.Port = BeaconPort;
+	UE_LOG(LogTemp, Warning, TEXT("TRYING TO CONNECT TO : %s:%d"),
+		*Destination.Host, Destination.Port);
 
 	UE_LOG(LogTemp, Warning, TEXT("TRYING TO CONNECT TO : %s:%d"), *Destination.Host, Destination.Port);
 
 	// Callback validation Beacon
-	BeaconClient->OnRequestValidate.BindLambda(
-		[this, TempResult, BeaconClient](bool bValidated)
+	LobbyBeaconClient->OnRequestValidate.BindLambda(
+		[this, TempResult](bool bValidated)
 		{
 			if (bValidated)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Beacon validated, envoi des infos lobby"));
-
-				FPlayerLobbyInfo MyInfo;
-				MyInfo.PlayerName = TEXT("PlayerX");
-				MyInfo.ProfileIcon = 1;
-				MyInfo.TeamIcon = 0;
-				MyInfo.UnitNames = { TEXT("Unit1"), TEXT("Unit2") };
-				MyInfo.PlayerId = FMath::Rand();
-
-				BeaconClient->Server_SendLobbyInfo(MyInfo);
-
-				JoinGameSession(TempResult);
+				UE_LOG(LogTemp, Warning, TEXT("Beacon validated"));
+				//JoinGameSession(TempResult);
 			}
 			else
 			{
@@ -211,7 +235,15 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 		}
 	);
 
-	BeaconClient->ConnectToServer(Destination);
+	FTimerHandle TimerHandle;
+	GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this, &Destination]()
+		{
+			if (LobbyBeaconClient && !bBeaconConnecting)
+			{
+				bBeaconConnecting = true;
+				LobbyBeaconClient->ConnectToServer(Destination);
+			}
+		}, 0.1f, false);
 }
 
 // ---- BEACON HOST ----
@@ -229,6 +261,8 @@ void UOnlineSessionSubsystem::CreateHostBeacon(int32 ListenPort, bool bOverrideP
 			HostObject->MaxSlots = MaxPlayers;
 			BeaconHost->RegisterHost(HostObject);
 			UE_LOG(LogTemp, Warning, TEXT("Host created, port listening : %d"), BeaconHost->ListenPort);
+			UE_LOG(LogTemp, Warning, TEXT("BeaconHost NetDriver: %s"),
+				BeaconHost->GetNetDriver() ? TEXT("VALID") : TEXT("NULL"));
 		}
 	}
 }

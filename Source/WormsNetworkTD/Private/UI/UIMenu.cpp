@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Beacon/LobbyBeaconClient.h"
+#include "Network/OnlineSessionSubsystem.h"
 
 void UUIMenu::NativeConstruct()
 {
@@ -15,10 +16,7 @@ void UUIMenu::NativeConstruct()
 	{
 		SessionSubsystem->OnFindSessionsCompleteEvent.AddDynamic(this, &UUIMenu::HandleFindSessionsCompleted);
 	}
-	if (ALobbyBeaconClient* BeaconClient = SessionSubsystem->GetLobbyBeaconClient())
-	{
-		BeaconClient->OnLobbyUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
-	}
+	SessionSubsystem->SetActiveMenu(this);
 	SetupMenu();
 }
 
@@ -425,6 +423,11 @@ void UUIMenu::OnJoinLobbyClicked(int32 Index)
 	SelectedSessionIndex = Index;
 	SessionSubsystem->CustomJoinSession(FoundSessions[SelectedSessionIndex], 7787, true);
 	HideRoomSettingsForJoiningPlayer();
+	ALobbyBeaconClient* BeaconClient = SessionSubsystem->GetLobbyBeaconClient();
+	if (BeaconClient)
+	{
+		BeaconClient->OnLobbyUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
+	}
 }
 
 #pragma endregion
@@ -664,6 +667,7 @@ bool UUIMenu::PassFilter(const FCustomSessionInfo& Session) const
 
 void UUIMenu::AddPlayerInfoUI(const FPlayerLobbyInfo& PlayerInfo)
 {
+	UE_LOG(LogTemp, Warning, TEXT("AddPlayerInfoUI: %s, Units: %d"), *PlayerInfo.PlayerName, PlayerInfo.UnitNB);
 	if (VB_PlayersInfos && PLayerInfoWidgetClass)
 	{
 		UUserInfoTemplate* PlayerInfoWidget = CreateWidget<UUserInfoTemplate>(GetWorld(), PLayerInfoWidgetClass);
@@ -709,6 +713,15 @@ void UUIMenu::HandleLobbyUpdated(const TArray<FPlayerLobbyInfo>& Players)
 		int32 MaxPlayers = GetMaxPlayersFromGameMode();
 		FString Tmp = FString::Printf(TEXT("%d/%d"), CurrentPlayers, MaxPlayers);
 		Txt_PlayerNb->SetText(FText::FromString(Tmp));
+	}
+}
+
+void UUIMenu::HandleBeaconCreated(ALobbyBeaconClient* BeaconClient)
+{
+	BeaconClient = SessionSubsystem->GetLobbyBeaconClient();
+	if (BeaconClient)
+	{
+		BeaconClient->OnLobbyUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
 	}
 }
 
