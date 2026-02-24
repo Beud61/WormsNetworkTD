@@ -31,4 +31,7 @@ public:
 
 	void RegisterOrUpdatePlayer(const FPlayerLobbyInfo& PlayerInfo);
 	void BroadcastLobbyUpdate();
+
+	UPROPERTY()
+	int32 RoomUnitCount;
 };

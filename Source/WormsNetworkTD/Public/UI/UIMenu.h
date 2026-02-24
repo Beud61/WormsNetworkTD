@@ -14,11 +14,10 @@
 #include "UI/UserInfoTemplate.h"
 #include "UI/RoomInfoTemplate.h"
 #include "Beacon/LobbyTypes.h"
+#include "Network/OnlineSessionSubsystem.h"
 #include "UIMenu.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerJoinedLobby, const FPlayerLobbyInfo&, PlayerInfo);
-
-class UOnlineSessionSubsystem;
 
 UCLASS()
 class WORMSNETWORKTD_API UUIMenu : public UUserWidget
@@ -171,7 +170,7 @@ public:
 
 	// Game instance pour acc�der au subsystem
 	
-	UOnlineSessionSubsystem* SessionSubsystem;
+	TObjectPtr<UOnlineSessionSubsystem> SessionSubsystem;
 
 	// === CALLBACKS MENU PRINCIPAL ===
 	UFUNCTION()

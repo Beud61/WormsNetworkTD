@@ -175,19 +175,16 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 	if (!LobbyBeaconClient)
 	{
 		LobbyBeaconClient = GetWorld()->SpawnActor<ALobbyBeaconClient>();
+		LobbyBeaconClient->OnLobbyUpdated.AddDynamic(
+			this,
+			&UOnlineSessionSubsystem::HandleLobbyUpdated_Internal
+		);
 		UE_LOG(LogTemp, Warning, TEXT("BeaconClient CREATED %p"), LobbyBeaconClient);
 
 		// Attendre que l'acteur soit pleinement initialisé
 		LobbyBeaconClient->SetActorHiddenInGame(true);
 		LobbyBeaconClient->SetActorEnableCollision(false);
 		LobbyBeaconClient->SetReplicates(true);
-
-		// --- BIND MENU AU BEACON ICI ---
-		if (ActiveMenu) // ActiveMenu = ton UUIMenu déjà créé
-		{
-			LobbyBeaconClient->OnLobbyUpdated.AddDynamic(ActiveMenu, &UUIMenu::HandleLobbyUpdated);
-			UE_LOG(LogTemp, Warning, TEXT("UUIMenu bound to Beacon OnLobbyUpdated"));
-		}
 	}
 	else
 	{
@@ -217,7 +214,7 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 		*Destination.Host, Destination.Port);
 
 	UE_LOG(LogTemp, Warning, TEXT("TRYING TO CONNECT TO : %s:%d"), *Destination.Host, Destination.Port);
-
+	LobbyBeaconClient->ConnectToServer(Destination);
 	// Callback validation Beacon
 	LobbyBeaconClient->OnRequestValidate.BindLambda(
 		[this, TempResult](bool bValidated)
@@ -235,7 +232,7 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 		}
 	);
 
-	FTimerHandle TimerHandle;
+	/*FTimerHandle TimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this, &Destination]()
 		{
 			if (LobbyBeaconClient && !bBeaconConnecting)
@@ -243,7 +240,7 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 				bBeaconConnecting = true;
 				LobbyBeaconClient->ConnectToServer(Destination);
 			}
-		}, 0.1f, false);
+		}, 0.1f, false);*/
 }
 
 // ---- BEACON HOST ----
@@ -263,6 +260,9 @@ void UOnlineSessionSubsystem::CreateHostBeacon(int32 ListenPort, bool bOverrideP
 			UE_LOG(LogTemp, Warning, TEXT("Host created, port listening : %d"), BeaconHost->ListenPort);
 			UE_LOG(LogTemp, Warning, TEXT("BeaconHost NetDriver: %s"),
 				BeaconHost->GetNetDriver() ? TEXT("VALID") : TEXT("NULL"));
+			int32 UnitCount = 1;
+			LastSessionSettings->Get("UNIT_COUNT", UnitCount);
+			HostObject->RoomUnitCount = UnitCount;
 		}
 	}
 }

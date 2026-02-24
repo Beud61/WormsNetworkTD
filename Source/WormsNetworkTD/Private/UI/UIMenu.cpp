@@ -6,7 +6,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Beacon/LobbyBeaconClient.h"
-#include "Network/OnlineSessionSubsystem.h"
 
 void UUIMenu::NativeConstruct()
 {
@@ -15,8 +14,8 @@ void UUIMenu::NativeConstruct()
 	if (SessionSubsystem)
 	{
 		SessionSubsystem->OnFindSessionsCompleteEvent.AddDynamic(this, &UUIMenu::HandleFindSessionsCompleted);
+		SessionSubsystem->OnLobbysUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
 	}
-	SessionSubsystem->SetActiveMenu(this);
 	SetupMenu();
 }
 
@@ -423,11 +422,6 @@ void UUIMenu::OnJoinLobbyClicked(int32 Index)
 	SelectedSessionIndex = Index;
 	SessionSubsystem->CustomJoinSession(FoundSessions[SelectedSessionIndex], 7787, true);
 	HideRoomSettingsForJoiningPlayer();
-	ALobbyBeaconClient* BeaconClient = SessionSubsystem->GetLobbyBeaconClient();
-	if (BeaconClient)
-	{
-		BeaconClient->OnLobbyUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
-	}
 }
 
 #pragma endregion

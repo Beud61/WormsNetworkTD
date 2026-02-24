@@ -4,7 +4,6 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "Interfaces/OnlineSessionInterface.h"
-#include "UI/UIMenu.h"
 #include "OnlineSessionSubsystem.generated.h"
 
 USTRUCT(BlueprintType)
@@ -29,6 +28,7 @@ struct FCustomSessionInfo
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFindGameSessionsComplete, const TArray<FCustomSessionInfo>&, SessionResults, bool, Successful);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSessionJoinCompleted, bool, bWasSuccessful);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBeaconClientCreated, ALobbyBeaconClient*, BeaconClient);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLobbysUpdated, const TArray<FPlayerLobbyInfo>&, Players);
 
 UCLASS()
 class WORMSNETWORKTD_API UOnlineSessionSubsystem : public UGameInstanceSubsystem
@@ -94,7 +94,11 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnBeaconClientCreated OnBeaconClientCreated;
 
-	UPROPERTY()
-	TObjectPtr<UUIMenu> ActiveMenu;
-	void SetActiveMenu(UUIMenu* Menu) { ActiveMenu = Menu; }
+	UPROPERTY(BlueprintAssignable)
+	FOnLobbysUpdated OnLobbysUpdated;
+	UFUNCTION()
+	void HandleLobbyUpdated_Internal(const TArray<FPlayerLobbyInfo>& Players)
+	{
+		OnLobbysUpdated.Broadcast(Players);
+	}
 };

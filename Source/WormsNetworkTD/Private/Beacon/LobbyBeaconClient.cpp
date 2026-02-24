@@ -58,6 +58,14 @@ void ALobbyBeaconClient::Client_ReservationAccepted_Implementation()
 	if (OnRequestValidate.IsBound())
 	{
 		OnRequestValidate.Execute(true);
+		FPlayerLobbyInfo MyPlayerInfo;
+		MyPlayerInfo.PlayerName = TEXT("PlayerTest"); // remplace par ton vrai nom
+		MyPlayerInfo.UnitNB = 1;
+		MyPlayerInfo.ProfileIcon = 0;
+		MyPlayerInfo.TeamIcon = 0;
+		MyPlayerInfo.PlayerId = FMath::Rand();
+
+		Server_SendLobbyInfo(MyPlayerInfo);
 	}
 	else
 	{

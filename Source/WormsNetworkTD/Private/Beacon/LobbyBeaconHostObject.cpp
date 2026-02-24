@@ -36,19 +36,23 @@ AOnlineBeaconClient* ALobbyBeaconHostObject::SpawnBeaconActor(UNetConnection* Cl
 
 void ALobbyBeaconHostObject::RegisterOrUpdatePlayer(const FPlayerLobbyInfo& PlayerInfo)
 {
+	FPlayerLobbyInfo CorrectedInfo = PlayerInfo;
+	//Le host impose le nombre d’unités
+	CorrectedInfo.UnitNB = RoomUnitCount;
+
 	int32 Index = ConnectedPlayers.IndexOfByPredicate(
 		[&](const FPlayerLobbyInfo& P)
 		{
-			return P.PlayerId == PlayerInfo.PlayerId;
+			return P.PlayerId == CorrectedInfo.PlayerId;
 		});
 
 	if (Index != INDEX_NONE)
 	{
-		ConnectedPlayers[Index] = PlayerInfo;
+		ConnectedPlayers[Index] = CorrectedInfo;
 	}
 	else
 	{
-		ConnectedPlayers.Add(PlayerInfo);
+		ConnectedPlayers.Add(CorrectedInfo);
 	}
 
 	BroadcastLobbyUpdate();
