@@ -70,4 +70,23 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_SetFacingDirection(float NewDirection);
+
+	/* ================ PROJECTILES ================ */
+	UPROPERTY(EditDefaultsOnly)
+	float MaxThrowSpeed = 2000.f;
+
+	UPROPERTY(EditDefaultsOnly)
+	float MinThrowSpeed = 500.f;
+
+	UPROPERTY(EditDefaultsOnly)
+	float CurrentThrowSpeed = 1000.f;
+
+	UPROPERTY(EditDefaultsOnly)
+	float ThrowAngle = 45.f;
+
+	UPROPERTY()
+	class USplineComponent* TrajectorySpline;
+
+	FVector CalculateLaunchVelocity() const;
+	void UpdateTrajectory();
 };

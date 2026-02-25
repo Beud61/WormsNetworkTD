@@ -1,6 +1,9 @@
 #include "Actors/CustomPaperCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include <Net/UnrealNetwork.h>
+#include "Components/SplineComponent.h"
+#include <Kismet/GameplayStaticsTypes.h>
+#include <Kismet/GameplayStatics.h>
 
 ACustomPaperCharacter::ACustomPaperCharacter()
 {
@@ -38,6 +41,10 @@ ACustomPaperCharacter::ACustomPaperCharacter()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(SpringArm);
 	Camera->bUsePawnControlRotation = false;
+
+	/* ================= PROJECTILES ================ */
+	TrajectorySpline = CreateDefaultSubobject<USplineComponent>("TrajectorySpline");
+	TrajectorySpline->SetupAttachment(RootComponent);
 }
 
 void ACustomPaperCharacter::Tick(float DeltaTime)
@@ -118,8 +125,54 @@ void ACustomPaperCharacter::OnRep_FacingDirection()
 	GetSprite()->SetRelativeScale3D(FVector(FacingDirection, 1.f, 1.f));
 }
 
+FVector ACustomPaperCharacter::CalculateLaunchVelocity() const
+{
+	float Radians = FMath::DegreesToRadians(ThrowAngle);
+
+	FVector LaunchVelocity;
+	LaunchVelocity.X = FMath::Cos(Radians) * CurrentThrowSpeed * FacingDirection;
+	LaunchVelocity.Z = FMath::Sin(Radians) * CurrentThrowSpeed;
+	LaunchVelocity.Y = 0.f;
+
+	return LaunchVelocity;
+}
+
 void ACustomPaperCharacter::Server_SetFacingDirection_Implementation(float NewDirection)
 {
 	FacingDirection = FMath::Sign(NewDirection);
 	OnRep_FacingDirection();
+}
+
+void ACustomPaperCharacter::UpdateTrajectory()
+{
+	FPredictProjectilePathParams Params;
+
+	Params.StartLocation = GetActorLocation() + FVector(0, 0, 50.f);
+	Params.LaunchVelocity = CalculateLaunchVelocity();
+	Params.bTraceWithCollision = true;
+	Params.ProjectileRadius = 10.f;
+	Params.MaxSimTime = 5.f;
+	Params.SimFrequency = 20.f;
+	Params.TraceChannel = ECC_Visibility;
+
+	FPredictProjectilePathResult Result;
+
+	bool bHit = UGameplayStatics::PredictProjectilePath(
+		this,
+		Params,
+		Result
+	);
+
+	TrajectorySpline->ClearSplinePoints(false);
+
+	for (const FPredictProjectilePathPointData& Point : Result.PathData)
+	{
+		TrajectorySpline->AddSplinePoint(
+			Point.Location,
+			ESplineCoordinateSpace::World,
+			false
+		);
+	}
+
+	TrajectorySpline->UpdateSpline();
 }
