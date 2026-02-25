@@ -103,9 +103,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TArray<TObjectPtr<UUserInfoTemplate>> PlayersInfosUI;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Info")
+	FString SRoomName;
+
+	#pragma endregion
+
+
 	// ============================================================
 	//  FIND ROOM
 	// ============================================================
+
+	#pragma region Find Room UI Binds
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_CloseFindRoom;
