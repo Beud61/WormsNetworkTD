@@ -73,6 +73,29 @@ void ACustomPlayerController::ClientTravelInternal_Implementation(const FString&
 }
 
 // ============================================================
+//  RPC Server
+// ============================================================
+
+void ACustomPlayerController::Server_StartGame_Implementation()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// S'exécute sur le serveur : on peut itérer tous les PC connectés
+	// et leur envoyer le RPC Client pour cacher leur menu.
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ACustomPlayerController* PC = Cast<ACustomPlayerController>(It->Get()))
+		{
+			PC->Client_NotifyGameStarting();
+		}
+	}
+
+	// TODO : remplacer par le chemin de ta vraie map de jeu.
+	World->ServerTravel(TEXT("/Game/Maps/Lobby"));
+}
+
+// ============================================================
 //  RPC Client
 // ============================================================
 

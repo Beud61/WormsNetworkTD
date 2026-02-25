@@ -43,7 +43,7 @@ protected:
 	 * juste avant le ClientTravel. On en profite pour cacher le menu
 	 * et poser le flag bGameStarted avant que BeginPlay se relance.
 	 */
-	virtual void ClientTravelInternal_Implementation(const FString& URL,
+	void ClientTravelInternal_Implementation(const FString& URL,
 		ETravelType TravelType, bool bSeamless,
 		const FGuid& MapPackageGuid);
 
@@ -81,10 +81,17 @@ public:
 	void HideMainMenu();
 
 	/**
-	 * RPC Client ? appelé par le GameMode sur tous les PlayerControllers
-	 * connectés juste avant ServerTravel pour que chaque client cache
-	 * son menu et pose son flag bGameStarted.
+	 * RPC Client -> appelé par le serveur sur chaque PC connecté juste
+	 * avant ServerTravel pour cacher le menu et poser bGameStarted.
 	 */
 	UFUNCTION(Client, Reliable)
 	void Client_NotifyGameStarting();
+
+	/**
+	 * RPC Server -> appelé par l'UI (n'importe quel joueur peut être hôte).
+	 * S'exécute toujours sur le serveur, notifie tous les clients puis
+	 * lance le ServerTravel.
+	 */
+	UFUNCTION(Server, Reliable)
+	void Server_StartGame();
 };

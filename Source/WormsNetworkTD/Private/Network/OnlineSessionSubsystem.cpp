@@ -147,7 +147,7 @@ void UOnlineSessionSubsystem::OnFindSessionsCompleted(bool Successful)
 		SessionInfos.Add(Info);
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("FindSessions termine: %d résultat(s), succes=%d"),
+	UE_LOG(LogTemp, Warning, TEXT("FindSessions termine: %d resultat(s), succes=%d"),
 		SearchResults.Num(), Successful);
 
 	OnFindSessionsCompleteEvent.Broadcast(SessionInfos, Successful);
@@ -266,10 +266,35 @@ void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& Sessio
 		}
 	);
 
-	// Connexion au beacon host
-	FURL Destination(nullptr, TEXT("127.0.0.1"), TRAVEL_Absolute);
+	// Résolution de l'adresse IP de l'hôte depuis l'OSS.
+	// GetResolvedConnectString retourne quelque chose comme "192.168.1.10:7777".
+	// On extrait l'IP et on remplace le port par celui du beacon.
+	FString HostIP = TEXT("127.0.0.1"); // fallback PIE/LAN local
+	{
+		FString ConnectString;
+		if (Session->GetResolvedConnectString(TempResult, NAME_GameSession, ConnectString))
+		{
+			// ConnectString format : "IP:Port" — on garde seulement l'IP
+			FString Port;
+			if (ConnectString.Split(TEXT(":"), &HostIP, &Port))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: IP hote resolue = %s"), *HostIP);
+			}
+			else
+			{
+				// Pas de ":" -> ConnectString est déjà une IP pure
+				HostIP = ConnectString;
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: GetResolvedConnectString echoue, fallback 127.0.0.1"));
+		}
+	}
+
+	FURL Destination(nullptr, *HostIP, TRAVEL_Absolute);
 	Destination.Port = LobbyConstants::BeaconPort;
-	UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: connexion a %s:%d"), *Destination.Host, Destination.Port);
+	UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: connexion beacon a %s:%d"), *Destination.Host, Destination.Port);
 
 	bBeaconConnecting = true;
 	LobbyBeaconClient->ConnectToServer(Destination);
@@ -369,7 +394,7 @@ void UOnlineSessionSubsystem::ConnectHostAsClient(const FPlayerLobbyInfo& HostIn
 			bBeaconConnecting = false;
 			if (bValidated)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ConnectHostAsClient: hote enregistré dans le lobby."));
+				UE_LOG(LogTemp, Warning, TEXT("ConnectHostAsClient: hote enregistre dans le lobby."));
 				OnBeaconClientCreated.Broadcast(LobbyBeaconClient);
 			}
 			else

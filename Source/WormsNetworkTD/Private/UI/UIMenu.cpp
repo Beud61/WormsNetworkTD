@@ -239,24 +239,10 @@ void UUIMenu::OnCloseRoomClicked()
 void UUIMenu::OnStartGameClicked()
 {
 	// TODO : vérifier que la room est pleine avant de lancer la partie.
-	CloseMenu();
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	// Notifie tous les PlayerControllers connectés AVANT le ServerTravel.
-	// Chaque PC pose son flag bGameStarted et cache son menu via le RPC
-	// Client_NotifyGameStarting, ce qui évite que BeginPlay recrée le menu
-	// sur la nouvelle map (le PlayerController survit au travel non-seamless).
-	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	if (ACustomPlayerController* PC = Cast<ACustomPlayerController>(GetOwningPlayer()))
 	{
-		if (ACustomPlayerController* PC = Cast<ACustomPlayerController>(It->Get()))
-		{
-			PC->Client_NotifyGameStarting();
-		}
+		PC->Server_StartGame();
 	}
-
-	// TODO : remplacer par le nom de la vraie map de jeu.
-	World->ServerTravel(TEXT("/Game/Maps/Lobby?listen"));
 }
 
 void UUIMenu::OnQuitLobbyClicked()
