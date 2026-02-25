@@ -10,9 +10,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "CustomPaperCharacter.h"
 #include "UI/UIMenu.h"
+#include "WormsGameInstance.h"
 #include "CustomPlayerController.generated.h"
-
-
 
 USTRUCT(BlueprintType)
 struct FInputActionSetup
@@ -29,20 +28,24 @@ struct FInputActionSetup
 	FMemberReference ActionName;
 };
 
-/**
- * 
- */
 UCLASS()
 class WORMSNETWORKTD_API ACustomPlayerController : public APlayerController
 {
 	GENERATED_BODY()
-	
+
 protected:
 	virtual void BeginPlay() override;
-
 	virtual void Tick(float DeltaTime) override;
-
 	virtual void SetupInputComponent() override;
+
+	/**
+	 * Appelé automatiquement par le moteur sur tous les clients
+	 * juste avant le ClientTravel. On en profite pour cacher le menu
+	 * et poser le flag bGameStarted avant que BeginPlay se relance.
+	 */
+	virtual void ClientTravelInternal_Implementation(const FString& URL,
+		ETravelType TravelType, bool bSeamless,
+		const FGuid& MapPackageGuid);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inputs")
 	TObjectPtr<class UInputMappingContext> MappingContextBase = nullptr;
@@ -65,7 +68,6 @@ protected:
 #endif
 
 public:
-
 	UFUNCTION(BlueprintCallable)
 	void Move(const FInputActionValue& Value);
 
@@ -78,4 +80,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void HideMainMenu();
 
+	/**
+	 * RPC Client ? appelé par le GameMode sur tous les PlayerControllers
+	 * connectés juste avant ServerTravel pour que chaque client cache
+	 * son menu et pose son flag bGameStarted.
+	 */
+	UFUNCTION(Client, Reliable)
+	void Client_NotifyGameStarting();
 };

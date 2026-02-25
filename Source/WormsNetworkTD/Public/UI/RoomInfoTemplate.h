@@ -7,15 +7,15 @@
 #include "Components/Button.h"
 #include "RoomInfoTemplate.generated.h"
 
-/**
- * 
- */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnJoinClicked, int32, SessionIndex);
+
 UCLASS()
 class WORMSNETWORKTD_API URoomInfoTemplate : public UUserWidget
 {
 	GENERATED_BODY()
 	
 public:
+	virtual void NativeConstruct() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room Info")
 	int32 RoomPing = 0;
@@ -38,6 +38,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room Info")
 	int32 MaxPlayerInRoom = 2;
 
+	UPROPERTY()
+	int32 SessionIndex;
+
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_JoinLobby;
@@ -47,5 +50,8 @@ public:
 	void UpdateValues();
 	void UpdateValues_Implementation();
 
-
+	UPROPERTY(BlueprintAssignable)
+	FOnJoinClicked OnJoinClicked;
+	UFUNCTION()
+	void HandleJoinClicked();
 };

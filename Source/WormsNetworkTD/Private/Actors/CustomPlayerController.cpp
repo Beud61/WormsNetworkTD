@@ -1,28 +1,37 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "Actors/CustomPlayerController.h"
+#include "WormsGameInstance.h"
 
 void ACustomPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
 	if (!MappingContextBase)
-	{
 		return;
-	}
 
 	if (GetLocalPlayer())
 	{
-		if (TObjectPtr<UEnhancedInputLocalPlayerSubsystem> InputSystem = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		if (TObjectPtr<UEnhancedInputLocalPlayerSubsystem> InputSystem =
+			GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
 		{
 			InputSystem->AddMappingContext(MappingContextBase, 0);
 		}
 	}
 
 	MyPlayer = Cast<ACustomPaperCharacter>(GetPawn());
+
+	// On n'affiche le menu que si la partie n'a pas encore commencé.
+	// Sans ce guard, BeginPlay recrée le menu sur la nouvelle map
+	// après le ServerTravel car le PlayerController survit au travel.
 	if (IsLocalController())
-		ShowMainMenu();
+	{
+		UWormsGameInstance* GI = Cast<UWormsGameInstance>(GetGameInstance());
+		if (!GI || !GI->bGameStarted)
+		{
+			ShowMainMenu();
+		}
+	}
 }
 
 void ACustomPlayerController::Tick(float DeltaTime)
@@ -34,7 +43,8 @@ void ACustomPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	if (TObjectPtr<UEnhancedInputComponent> EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
+	if (TObjectPtr<UEnhancedInputComponent> EnhancedInputComponent =
+		Cast<UEnhancedInputComponent>(InputComponent))
 	{
 		for (FInputActionSetup i : IA_Setup)
 		{
@@ -42,6 +52,44 @@ void ACustomPlayerController::SetupInputComponent()
 		}
 	}
 }
+
+// ============================================================
+//  Travel
+// ============================================================
+
+void ACustomPlayerController::ClientTravelInternal_Implementation(const FString& URL,
+	ETravelType TravelType, bool bSeamless, const FGuid& MapPackageGuid)
+{
+	// Pose le flag dans le GameInstance (survit au travel) et cache le menu
+	// AVANT que le Super déclenche le vrai travel et détruise le monde.
+	UE_LOG(LogTemp, Warning, TEXT("ClientTravelInternal: URL=%s"), *URL);
+	if (UWormsGameInstance* GI = Cast<UWormsGameInstance>(GetGameInstance()))
+	{
+		GI->bGameStarted = true;
+	}
+	HideMainMenu();
+
+	Super::ClientTravelInternal_Implementation(URL, TravelType, bSeamless, MapPackageGuid);
+}
+
+// ============================================================
+//  RPC Client
+// ============================================================
+
+void ACustomPlayerController::Client_NotifyGameStarting_Implementation()
+{
+	// Appelé par le serveur sur chaque PC connecté juste avant ServerTravel.
+	UE_LOG(LogTemp, Warning, TEXT("Client_NotifyGameStarting appele."));
+	if (UWormsGameInstance* GI = Cast<UWormsGameInstance>(GetGameInstance()))
+	{
+		GI->bGameStarted = true;
+	}
+	HideMainMenu();
+}
+
+// ============================================================
+//  Input
+// ============================================================
 
 void ACustomPlayerController::Move(const FInputActionValue& Value)
 {
@@ -61,6 +109,10 @@ void ACustomPlayerController::Jump(const FInputActionValue& Value)
 	if (!MyPlayer) return;
 	MyPlayer->Jump();
 }
+
+// ============================================================
+//  UI
+// ============================================================
 
 void ACustomPlayerController::ShowMainMenu()
 {
@@ -82,5 +134,7 @@ void ACustomPlayerController::HideMainMenu()
 	if (MenuWidgetInstance)
 	{
 		MenuWidgetInstance->CloseMenu();
+		// On garde la référence pour ne pas recréer le widget
+		// si ShowMainMenu est rappelé (ex: retour au menu principal).
 	}
 }
