@@ -17,8 +17,6 @@
 #include "Network/OnlineSessionSubsystem.h"
 #include "UIMenu.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerJoinedLobby, const FPlayerLobbyInfo&, PlayerInfo);
-
 UCLASS()
 class WORMSNETWORKTD_API UUIMenu : public UUserWidget
 {
@@ -28,8 +26,10 @@ protected:
 	virtual void NativeConstruct() override;
 
 public:
+	// ============================================================
+	//  MENU PRINCIPAL
+	// ============================================================
 
-	// === MENU PRINCIPAL ===
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UVerticalBox> MenuPanel;
 
@@ -48,9 +48,9 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_Quit;
 
-	// === CREATE ROOM SETTINGS ===
-
-	#pragma region Create Room UI Binds
+	// ============================================================
+	//  CREATE ROOM
+	// ============================================================
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> CreateRoomSettings;
@@ -103,11 +103,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TArray<TObjectPtr<UUserInfoTemplate>> PlayersInfosUI;
 
-	#pragma endregion
-
-	// === FIND ROOM SETTINGS === //
-
-	#pragma region Find Room UI Binds
+	// ============================================================
+	//  FIND ROOM
+	// ============================================================
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_CloseFindRoom;
@@ -129,35 +127,22 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> FindRoomScrollBox;
-	
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UOverlay> FindRoom;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<UUserWidget> RoomInfoWidgetClass;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TArray<TObjectPtr<URoomInfoTemplate>> RoomInfosUI;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UOverlay> FindRoom;
+	// ============================================================
+	//  SETTINGS DE PARTIE (valeurs sélectionnées dans les ComboBox)
+	// ============================================================
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-	bool bCheckBoxAll;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-	bool bCheckBox1V1;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-	bool bCheckBox2V2;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-	bool bCheckBoxFFA;
-
-#pragma endregion
-
-
-
-	// Variables pour stocker les choix
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
-	FString SelectedGameMode = "1v1";
+	FString SelectedGameMode = LobbyConstants::GameMode_1V1;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
 	int32 SelectedTurnsBeforeWater = 10;
@@ -168,11 +153,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Settings")
 	int32 SelectedUnitCount = 1;
 
-	// Game instance pour acc�der au subsystem
-	
-	TObjectPtr<UOnlineSessionSubsystem> SessionSubsystem;
+	// ============================================================
+	//  CALLBACKS — MENU PRINCIPAL
+	// ============================================================
 
-	// === CALLBACKS MENU PRINCIPAL ===
 	UFUNCTION()
 	void OnCreateRoomClicked();
 
@@ -188,7 +172,10 @@ public:
 	UFUNCTION()
 	void OnQuitClicked();
 
-	// === CALLBACKS CREATE ROOM ===
+	// ============================================================
+	//  CALLBACKS — CREATE ROOM
+	// ============================================================
+
 	UFUNCTION()
 	void OnCloseCreateRoomSettingsClicked();
 
@@ -216,9 +203,10 @@ public:
 	UFUNCTION()
 	void OnUnitCountChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
+	// ============================================================
+	//  CALLBACKS — FIND ROOM
+	// ============================================================
 
-
-	// === CALLBACKS FIND ROOM ===
 	UFUNCTION()
 	void OnCloseFindRoomClicked();
 
@@ -240,11 +228,10 @@ public:
 	UFUNCTION()
 	void OnJoinLobbyClicked(int32 Index);
 
+	// ============================================================
+	//  FONCTIONS UTILITAIRES
+	// ============================================================
 
-
-
-
-	// === FONCTIONS UTILITAIRES ===
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void SetupMenu();
 
@@ -264,32 +251,57 @@ public:
 	void HideRoomSettingsForJoiningPlayer();
 
 	UFUNCTION(BlueprintCallable, Category = "Room")
-	void AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom, int32 MaxPlayerInRoom, int32 RoomPing, int32 SessionIndex);
+	void AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom,
+		int32 MaxPlayerInRoom, int32 RoomPing, int32 SessionIndex);
 
-	UFUNCTION()
-	int32 GetMaxPlayersFromGameMode() const;
+	// ============================================================
+	//  FIND ROOM — état
+	// ============================================================
 
-	//FIND ROOM
 	TArray<FCustomSessionInfo> FoundSessions;
 	int32 SelectedSessionIndex = INDEX_NONE;
+
 	UFUNCTION()
 	void HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sessions, bool bWasSuccessful);
 
 	UFUNCTION()
-	int32 ConvertGameModeToID(const FString& GameMode) const;
-
-	UFUNCTION()
 	bool PassFilter(const FCustomSessionInfo& Session) const;
 
-	//JOIN ROOM
+	// ============================================================
+	//  JOIN / LOBBY — état
+	// ============================================================
+
+	/** true si le joueur a cliqué sur "Quick Join" (rejoindre la première session trouvée). */
 	bool bIsQuickJoin = false;
-	UPROPERTY(BlueprintAssignable)
-	FOnPlayerJoinedLobby OnPlayerJoinedLobby;
+
 	UFUNCTION()
 	void AddPlayerInfoUI(const FPlayerLobbyInfo& PlayerInfo);
+
 	UFUNCTION()
 	void HandleLobbyUpdated(const TArray<FPlayerLobbyInfo>& Players);
 
 	UFUNCTION()
 	void HandleBeaconCreated(ALobbyBeaconClient* BeaconClient);
+
+private:
+	/** Référence au subsystem de session (initialisée dans NativeConstruct). */
+	TObjectPtr<UOnlineSessionSubsystem> SessionSubsystem;
+
+	// ============================================================
+	//  État interne des filtres (source de vérité)
+	// ============================================================
+	bool bCheckBoxAll = true;
+	bool bCheckBox1V1 = false;
+	bool bCheckBox2V2 = false;
+	bool bCheckBoxFFA = false;
+
+	// ============================================================
+	//  Helpers privés
+	// ============================================================
+
+	/** Met à jour le texte Txt_PlayerNb à partir de la liste des joueurs. */
+	void UpdatePlayerCountText(int32 CurrentPlayers);
+
+	/** Met à jour les widgets de statut de la room (Status + PlayerNb). */
+	void UpdateRoomStatusUI(bool bIsOpen, int32 CurrentPlayers);
 };
