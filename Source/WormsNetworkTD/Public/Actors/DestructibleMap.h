@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "ProceduralMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "DestructibleMap.generated.h"
 
 UCLASS()
@@ -15,13 +16,14 @@ public:
     ADestructibleMap();
     virtual void BeginPlay() override;
 
-    // Declenche une explosion
     UFUNCTION(BlueprintCallable, Category = "Destruction")
     void ApplyExplosion(FVector2D WorldPosition, float Radius);
 
-    // Verifie si un point est dans le terrain solide
     UFUNCTION(BlueprintCallable, Category = "Destruction")
     bool IsSolid(FVector2D WorldPosition) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Destruction|Debug")
+    void DrawDebugCollision();
 
 protected:
     UPROPERTY(EditAnywhere, Category = "Map")
@@ -36,17 +38,25 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Map")
     FVector2D MapWorldSize = FVector2D(4096.f, 1024.f);
 
-    // Simplifie le contour : 1 = chaque pixel, 4 = 1 point tous les 4 pixels
-    // Plus c'est grand, moins de polygones mais moins precis
+    // 1 point tous les N pixels. 8 = bon compromis, 16 = leger
     UPROPERTY(EditAnywhere, Category = "Map|Collision")
-    int32 CollisionStep = 4;
+    int32 ContourStep = 8;
 
-    // Le mesh visuel (plane)
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map")
+    // Epaisseur du mesh de collision en Y (doit etre > demi-capsule du perso)
+    UPROPERTY(EditAnywhere, Category = "Map|Collision")
+    float CollisionThickness = 200.f;
+
+    // Debug visuel au BeginPlay
+    UPROPERTY(EditAnywhere, Category = "Map|Debug")
+    bool bShowDebugCollision = false;
+
+    UPROPERTY(EditAnywhere, Category = "Map|Debug")
+    float DebugDuration = 60.f;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     TObjectPtr<UStaticMeshComponent> MapMesh;
 
-    // Le mesh de collision procedural (invisible, juste pour la physique)
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     TObjectPtr<UProceduralMeshComponent> CollisionMesh;
 
 private:
@@ -59,17 +69,17 @@ private:
     int32 RTWidth = 2048;
     int32 RTHeight = 512;
 
-    // Cache CPU : true = solide, false = vide
     TArray<bool> SolidPixels;
 
     void InitRenderTarget();
-    void BuildPixelDataFromTexture();
+    void BuildSolidPixels();
     void RebuildCollisionMesh();
-    void UpdatePixelsAfterExplosion(FVector2D WorldPosition, float Radius);
-    void ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const;
-    FVector2D UVToWorld(float U, float V) const;
 
-    // Trouve la hauteur du terrain a une colonne X en pixels
-    int32 GetSurfaceY(int32 PixelX) const;
-    void RebuildCollisionMeshZone(FVector2D WorldPosition, float Radius);
+    // Retourne la hauteur world Z de la surface a un X world donne
+    float GetSurfaceWorldZ(float WorldX) const;
+
+    int32 GetSurfacePixelY(int32 PixelX) const;
+    void ConvertWorldToPixel(FVector2D WorldPos, int32& OutPX, int32& OutPY) const;
+    FVector2D PixelToWorld(float PX, float PY) const;
+    void ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const;
 };

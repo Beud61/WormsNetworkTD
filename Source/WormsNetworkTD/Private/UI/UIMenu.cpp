@@ -255,7 +255,7 @@ void UUIMenu::OnStartGameClicked()
 		}
 	}
 
-	// TODO : remplacer par le nom de la vraie map de jeu.
+
 	World->ServerTravel(TEXT("/Game/Maps/Lobby?listen"));
 }
 

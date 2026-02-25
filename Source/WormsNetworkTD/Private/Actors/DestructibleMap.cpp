@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "Actors/DestructibleMap.h"
 #include "Engine/Canvas.h"
 #include "Kismet/KismetRenderingLibrary.h"
@@ -25,14 +23,16 @@ ADestructibleMap::ADestructibleMap()
     if (PlaneMesh.Succeeded())
         MapMesh->SetStaticMesh(PlaneMesh.Object);
 
-    // Le mesh de collision est invisible - juste pour la physique
     CollisionMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("CollisionMesh"));
     CollisionMesh->SetupAttachment(RootComponent);
     CollisionMesh->SetVisibility(false);
+
+    // IMPORTANT : simple collision uniquement
+    // Le mesh est un solide extrade en Y — la capsule du perso le touche
+    CollisionMesh->bUseComplexAsSimpleCollision = false;
     CollisionMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     CollisionMesh->SetCollisionObjectType(ECC_WorldStatic);
     CollisionMesh->SetCollisionResponseToAllChannels(ECR_Block);
-    CollisionMesh->bUseComplexAsSimpleCollision = true; // Utilise le mesh exact comme collider
 }
 
 // ============================================================
@@ -42,8 +42,11 @@ void ADestructibleMap::BeginPlay()
 {
     Super::BeginPlay();
     InitRenderTarget();
-    BuildPixelDataFromTexture();
+    BuildSolidPixels();
     RebuildCollisionMesh();
+
+    if (bShowDebugCollision)
+        DrawDebugCollision();
 }
 
 // ============================================================
@@ -62,11 +65,9 @@ void ADestructibleMap::InitRenderTarget()
 
     DestructionMask = UKismetRenderingLibrary::CreateRenderTarget2D(
         GetWorld(), RTWidth, RTHeight, RTF_RGBA8);
-
     if (!DestructionMask) return;
 
-    UKismetRenderingLibrary::ClearRenderTarget2D(
-        GetWorld(), DestructionMask, FLinearColor::White);
+    UKismetRenderingLibrary::ClearRenderTarget2D(GetWorld(), DestructionMask, FLinearColor::White);
 
     if (MapMaterial)
     {
@@ -79,21 +80,17 @@ void ADestructibleMap::InitRenderTarget()
     FVector Scale(MapWorldSize.X / 100.f, MapWorldSize.Y / 100.f, 1.f);
     MapMesh->SetRelativeScale3D(Scale);
 
-    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Init OK  RT %dx%d"), RTWidth, RTHeight);
+    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Init OK %dx%d"), RTWidth, RTHeight);
 }
 
 // ============================================================
-//  BuildPixelDataFromTexture
-//  Lit l'alpha du PNG pour savoir quels pixels sont solides
+//  BuildSolidPixels
 // ============================================================
-void ADestructibleMap::BuildPixelDataFromTexture()
+void ADestructibleMap::BuildSolidPixels()
 {
     if (!MapTexture) return;
 
     FTexture2DMipMap& Mip = MapTexture->GetPlatformData()->Mips[0];
-    const int32 W = Mip.SizeX;
-    const int32 H = Mip.SizeY;
-
     if (!Mip.BulkData.IsBulkDataLoaded())
         Mip.BulkData.LoadBulkDataWithFileReader();
 
@@ -101,198 +98,238 @@ void ADestructibleMap::BuildPixelDataFromTexture()
 
     if (Data)
     {
-        const uint8* Pixels = static_cast<const uint8*>(Data);
-        SolidPixels.SetNum(W * H);
-        for (int32 i = 0; i < W * H; i++)
-            SolidPixels[i] = Pixels[i * 4 + 3] > 10; // Alpha > 10 = solide
+        const uint8* Px = static_cast<const uint8*>(Data);
+        SolidPixels.SetNum(RTWidth * RTHeight);
+        for (int32 i = 0; i < RTWidth * RTHeight; i++)
+            SolidPixels[i] = Px[i * 4 + 3] > 10;
         Mip.BulkData.Unlock();
-        UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: PNG lu OK (%dx%d)"), W, H);
+        UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: %d pixels lus (BulkData)"), RTWidth * RTHeight);
+        return;
     }
-    else
+
+    Mip.BulkData.Unlock();
+
+    // Fallback : via Render Target temporaire
+    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: BulkData vide, fallback RT..."));
+    UTextureRenderTarget2D* TempRT = UKismetRenderingLibrary::CreateRenderTarget2D(
+        GetWorld(), RTWidth, RTHeight, RTF_RGBA8);
+
+    UCanvas* C; FVector2D CS; FDrawToRenderTargetContext Ctx;
+    UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(GetWorld(), TempRT, C, CS, Ctx);
+    if (C) C->K2_DrawTexture(MapTexture, FVector2D(0, 0), FVector2D(RTWidth, RTHeight), FVector2D(0, 0));
+    UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(GetWorld(), Ctx);
+
+    FRenderTarget* RT = TempRT->GameThread_GetRenderTargetResource();
+    if (RT)
     {
-        Mip.BulkData.Unlock();
-
-        // Fallback : dessine sur un RT temporaire et lit les pixels
-        UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Fallback RT..."));
-        UTextureRenderTarget2D* TempRT = UKismetRenderingLibrary::CreateRenderTarget2D(
-            GetWorld(), W, H, RTF_RGBA8);
-
-        UCanvas* Canvas; FVector2D CanvasSize; FDrawToRenderTargetContext Ctx;
-        UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(GetWorld(), TempRT, Canvas, CanvasSize, Ctx);
-        if (Canvas)
-            Canvas->K2_DrawTexture(MapTexture, FVector2D(0, 0), FVector2D(W, H), FVector2D(0, 0));
-        UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(GetWorld(), Ctx);
-
-        FRenderTarget* RT = TempRT->GameThread_GetRenderTargetResource();
-        if (RT)
-        {
-            TArray<FColor> TempPixels;
-            RT->ReadPixels(TempPixels);
-            SolidPixels.SetNum(W * H);
-            for (int32 i = 0; i < TempPixels.Num(); i++)
-                SolidPixels[i] = TempPixels[i].A > 10;
-            UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Fallback OK"));
-        }
-        TempRT->ConditionalBeginDestroy();
+        TArray<FColor> Tmp;
+        RT->ReadPixels(Tmp);
+        SolidPixels.SetNum(Tmp.Num());
+        for (int32 i = 0; i < Tmp.Num(); i++)
+            SolidPixels[i] = Tmp[i].A > 10;
+        UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Fallback OK"));
     }
+    TempRT->ConditionalBeginDestroy();
 }
 
 // ============================================================
-//  GetSurfaceY
-//  Retourne le Y (pixel) de la surface du terrain a la colonne X
-//  = le premier pixel solide en partant du haut
+//  GetSurfacePixelY
+//  Premier pixel solide depuis le haut a la colonne PX
 // ============================================================
-int32 ADestructibleMap::GetSurfaceY(int32 PixelX) const
+int32 ADestructibleMap::GetSurfacePixelY(int32 PixelX) const
 {
-    if (SolidPixels.IsEmpty()) return RTHeight;
     PixelX = FMath::Clamp(PixelX, 0, RTWidth - 1);
-
     for (int32 PY = 0; PY < RTHeight; PY++)
-    {
-        if (SolidPixels[PY * RTWidth + PixelX])
-            return PY;
-    }
-    return RTHeight; // Colonne vide (trou jusqu'en bas)
+        if (SolidPixels[PY * RTWidth + PixelX]) return PY;
+    return RTHeight;
 }
 
 // ============================================================
-//  UVToWorld — convertit UV [0,1] en position world
+//  PixelToWorld
 // ============================================================
-FVector2D ADestructibleMap::UVToWorld(float U, float V) const
+FVector2D ADestructibleMap::PixelToWorld(float PX, float PY) const
 {
-    const FVector ActorLoc = GetActorLocation();
-    float WorldX = (ActorLoc.X - MapWorldSize.X * 0.5f) + U * MapWorldSize.X;
-    float WorldZ = (ActorLoc.Z + MapWorldSize.Y * 0.5f) - V * MapWorldSize.Y;
-    return FVector2D(WorldX, WorldZ);
+    const FVector Loc = GetActorLocation();
+    float WX = (Loc.X - MapWorldSize.X * 0.5f) + (PX / RTWidth) * MapWorldSize.X;
+    float WZ = (Loc.Z + MapWorldSize.Y * 0.5f) - (PY / RTHeight) * MapWorldSize.Y;
+    return FVector2D(WX, WZ);
+}
+
+void ADestructibleMap::ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const
+{
+    const FVector Loc = GetActorLocation();
+    U = (WorldPos.X - (Loc.X - MapWorldSize.X * 0.5f)) / MapWorldSize.X;
+    V = 1.f - (WorldPos.Y - (Loc.Z - MapWorldSize.Y * 0.5f)) / MapWorldSize.Y;
+    U = FMath::Clamp(U, 0.f, 1.f);
+    V = FMath::Clamp(V, 0.f, 1.f);
+}
+
+void ADestructibleMap::ConvertWorldToPixel(FVector2D WorldPos, int32& OutPX, int32& OutPY) const
+{
+    float U, V;
+    ConvertWorldToUV(WorldPos, U, V);
+    OutPX = FMath::Clamp((int32)(U * RTWidth), 0, RTWidth - 1);
+    OutPY = FMath::Clamp((int32)(V * RTHeight), 0, RTHeight - 1);
+}
+
+bool ADestructibleMap::IsSolid(FVector2D WorldPosition) const
+{
+    if (SolidPixels.IsEmpty()) return false;
+    int32 PX, PY;
+    ConvertWorldToPixel(WorldPosition, PX, PY);
+    return SolidPixels[PY * RTWidth + PX];
+}
+
+float ADestructibleMap::GetSurfaceWorldZ(float WorldX) const
+{
+    const FVector Loc = GetActorLocation();
+    float U = (WorldX - (Loc.X - MapWorldSize.X * 0.5f)) / MapWorldSize.X;
+    U = FMath::Clamp(U, 0.f, 1.f);
+    int32 PX = (int32)(U * RTWidth);
+    int32 PY = GetSurfacePixelY(PX);
+    FVector2D W = PixelToWorld((float)PX, (float)PY);
+    return W.Y;
 }
 
 // ============================================================
 //  RebuildCollisionMesh
-//  Genere UN seul mesh polygonal qui suit le contour du terrain
-//  Beaucoup plus efficace que des milliers de boxes !
 //
-//  Structure du mesh :
+//  Cree un mesh 3D extrade :
+//  - Face avant  (Y = +CollisionThickness/2)
+//  - Face arriere (Y = -CollisionThickness/2)
+//  - La surface du terrain forme le bord superieur
+//  - Le bas est fixe (fond de la map)
 //
-//  Surface (points hauts) :  p0--p1--p2--p3 ...
-//                             |   |   |   |
-//  Fond (points bas fixes) : b0--b1--b2--b3 ...
+//  Structure d'un quad entre colonnes i et i+1 :
 //
-//  On cree des quads entre chaque paire de colonnes
+//  SurfI --- SurfI+1    <- haut (surface terrain)
+//    |            |
+//  BotI  --- BotI+1     <- bas (fond fixe)
+//
+//  On extrade ca en Y pour donner de l'epaisseur
+//  => la capsule du Character peut collider dessus
 // ============================================================
 void ADestructibleMap::RebuildCollisionMesh()
 {
     if (SolidPixels.IsEmpty()) return;
 
-    TArray<FVector>     Vertices;
-    TArray<int32>       Triangles;
-    TArray<FVector>     Normals;
-    TArray<FVector2D>   UVs;
-    TArray<FColor>      Colors;
+    TArray<FVector>          Verts;
+    TArray<int32>            Tris;
+    TArray<FVector>          Normals;
+    TArray<FVector2D>        UVs;
+    TArray<FColor>           Colors;
     TArray<FProcMeshTangent> Tangents;
 
-    const float Y_Depth = 50.f; // Epaisseur du mesh de collision (axe Y, invisible)
-    const float BottomZ = GetActorLocation().Z - MapWorldSize.Y * 0.5f - 50.f; // Fond de la map
+    const float HalfThick = CollisionThickness * 0.5f;
+    const FVector Loc = GetActorLocation();
+    const float BottomZ = Loc.Z - MapWorldSize.Y * 0.5f - 20.f;
 
-    // On parcourt les colonnes avec le pas de simplification
-    // CollisionStep = 4 => 1 point tous les 4 pixels => -512 points pour 2048px
-    int32 VertIndex = 0;
-
-    for (int32 PX = 0; PX <= RTWidth - CollisionStep; PX += CollisionStep)
+    // Collecte les points de surface (1 par ContourStep pixels)
+    TArray<FVector2D> SurfacePoints;
+    for (int32 PX = 0; PX < RTWidth; PX += ContourStep)
     {
-        int32 PX2 = FMath::Min(PX + CollisionStep, RTWidth - 1);
+        int32 SY = GetSurfacePixelY(PX);
+        SurfacePoints.Add(PixelToWorld((float)PX, (float)SY));
+    }
+    // Dernier point (bord droit)
+    SurfacePoints.Add(PixelToWorld((float)(RTWidth - 1),
+        (float)GetSurfacePixelY(RTWidth - 1)));
 
-        // Hauteur de surface pour cette colonne et la suivante
-        int32 SurfY1 = GetSurfaceY(PX);
-        int32 SurfY2 = GetSurfaceY(PX2);
+    int32 N = SurfacePoints.Num();
+    if (N < 2) return;
 
-        // Convertit en coordonnees world
-        float U1 = (float)PX / RTWidth;
-        float U2 = (float)PX2 / RTWidth;
-        float V1 = (float)SurfY1 / RTHeight;
-        float V2 = (float)SurfY2 / RTHeight;
+    // Pour chaque colonne, on cree 4 vertices (2 avant, 2 arriere)
+    // puis on assemble les faces
+    //
+    // Index layout par colonne i :
+    //   i*4+0 = Surface avant  (Y = +HalfThick)
+    //   i*4+1 = Fond    avant  (Y = +HalfThick)
+    //   i*4+2 = Surface arriere (Y = -HalfThick)
+    //   i*4+3 = Fond    arriere (Y = -HalfThick)
 
-        FVector2D World1 = UVToWorld(U1, V1);
-        FVector2D World2 = UVToWorld(U2, V2);
+    for (int32 i = 0; i < N; i++)
+    {
+        FVector2D Surf = SurfacePoints[i];
+        Verts.Add(FVector(Surf.X, +HalfThick, Surf.Y));   // Surface avant
+        Verts.Add(FVector(Surf.X, +HalfThick, BottomZ));  // Fond avant
+        Verts.Add(FVector(Surf.X, -HalfThick, Surf.Y));   // Surface arriere
+        Verts.Add(FVector(Surf.X, -HalfThick, BottomZ));  // Fond arriere
 
-        // 4 vertices du quad :
-        // [0] haut-gauche   (surface colonne PX)
-        // [1] haut-droite   (surface colonne PX2)
-        // [2] bas-droite    (fond)
-        // [3] bas-gauche    (fond)
-
-        FVector v0(World1.X, -Y_Depth, World1.Y);  // haut-gauche
-        FVector v1(World2.X, -Y_Depth, World2.Y);  // haut-droite
-        FVector v2(World2.X, -Y_Depth, BottomZ);   // bas-droite
-        FVector v3(World1.X, -Y_Depth, BottomZ);   // bas-gauche
-
-        Vertices.Add(v0);
-        Vertices.Add(v1);
-        Vertices.Add(v2);
-        Vertices.Add(v3);
-
-        // Triangle 1 : 0,1,2
-        Triangles.Add(VertIndex + 0);
-        Triangles.Add(VertIndex + 1);
-        Triangles.Add(VertIndex + 2);
-
-        // Triangle 2 : 0,2,3
-        Triangles.Add(VertIndex + 0);
-        Triangles.Add(VertIndex + 2);
-        Triangles.Add(VertIndex + 3);
-
-        // Normales et UVs (pas importantes pour une collision invisible)
-        FVector Normal(0.f, -1.f, 0.f);
-        Normals.Add(Normal); Normals.Add(Normal);
-        Normals.Add(Normal); Normals.Add(Normal);
-
-        UVs.Add(FVector2D(U1, V1)); UVs.Add(FVector2D(U2, V2));
-        UVs.Add(FVector2D(U2, 1.f)); UVs.Add(FVector2D(U1, 1.f));
-
-        VertIndex += 4;
+        Normals.Add(FVector(0, 0, 1)); Normals.Add(FVector(0, 0, -1));
+        Normals.Add(FVector(0, 0, 1)); Normals.Add(FVector(0, 0, -1));
+        UVs.Add(FVector2D(0, 0)); UVs.Add(FVector2D(0, 1));
+        UVs.Add(FVector2D(1, 0)); UVs.Add(FVector2D(1, 1));
     }
 
-    // Cree le mesh de collision
-    CollisionMesh->CreateMeshSection(
-        0,          // Section index
-        Vertices,
-        Triangles,
-        Normals,
-        UVs,
-        Colors,
-        Tangents,
-        true        // true = genere la collision
-    );
+    // Assemble les quads entre colonnes adjacentes
+    for (int32 i = 0; i < N - 1; i++)
+    {
+        int32 A = i * 4;
+        int32 B = (i + 1) * 4;
 
-    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Collision mesh genere — %d vertices, %d triangles"),
-        Vertices.Num(), Triangles.Num() / 3);
+        // Face AVANT (Y = +HalfThick) : A0,B0,B1,A0,B1,A1
+        Tris.Add(A + 0); Tris.Add(B + 0); Tris.Add(B + 1);
+        Tris.Add(A + 0); Tris.Add(B + 1); Tris.Add(A + 1);
+
+        // Face ARRIERE (Y = -HalfThick) : A2,B3,B2,A2,A3,B3
+        Tris.Add(A + 2); Tris.Add(B + 3); Tris.Add(B + 2);
+        Tris.Add(A + 2); Tris.Add(A + 3); Tris.Add(B + 3);
+
+        // Face DESSUS (surface terrain) : A0,A2,B2,A0,B2,B0
+        Tris.Add(A + 0); Tris.Add(A + 2); Tris.Add(B + 2);
+        Tris.Add(A + 0); Tris.Add(B + 2); Tris.Add(B + 0);
+
+        // Face DESSOUS (fond) : A1,B3,A3,A1,B1,B3
+        Tris.Add(A + 1); Tris.Add(B + 3); Tris.Add(A + 3);
+        Tris.Add(A + 1); Tris.Add(B + 1); Tris.Add(B + 3);
+    }
+
+    CollisionMesh->CreateMeshSection(0, Verts, Tris, Normals, UVs, Colors, Tangents,
+        true); // true = genere la collision
+
+    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: CollisionMesh OK — %d colonnes, %d verts"),
+        N, Verts.Num());
 }
 
 // ============================================================
-//  ConvertWorldToUV
+//  DrawDebugCollision
+//  Ligne verte sur la surface, jaune sur les bords
 // ============================================================
-void ADestructibleMap::ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const
+void ADestructibleMap::DrawDebugCollision()
 {
-    const FVector ActorLoc = GetActorLocation();
-    U = (WorldPos.X - (ActorLoc.X - MapWorldSize.X * 0.5f)) / MapWorldSize.X;
-    V = 1.f - (WorldPos.Y - (ActorLoc.Z - MapWorldSize.Y * 0.5f)) / MapWorldSize.Y;
-    U = FMath::Clamp(U, 0.f, 1.f);
-    V = FMath::Clamp(V, 0.f, 1.f);
-}
+    if (SolidPixels.IsEmpty()) return;
 
-// ============================================================
-//  IsSolid
-// ============================================================
-bool ADestructibleMap::IsSolid(FVector2D WorldPosition) const
-{
-    if (SolidPixels.IsEmpty()) return false;
+    const UWorld* World = GetWorld();
+    const float Y = GetActorLocation().Y;
 
-    float U, V;
-    ConvertWorldToUV(WorldPosition, U, V);
+    FVector2D Prev = PixelToWorld(0.f, (float)GetSurfacePixelY(0));
 
-    const int32 PX = FMath::Clamp((int32)(U * RTWidth), 0, RTWidth - 1);
-    const int32 PY = FMath::Clamp((int32)(V * RTHeight), 0, RTHeight - 1);
+    for (int32 PX = ContourStep; PX < RTWidth; PX += ContourStep)
+    {
+        FVector2D Curr = PixelToWorld((float)PX, (float)GetSurfacePixelY(PX));
 
-    return SolidPixels[PY * RTWidth + PX];
+        DrawDebugLine(World,
+            FVector(Prev.X, Y, Prev.Y),
+            FVector(Curr.X, Y, Curr.Y),
+            FColor::Green, false, DebugDuration, 0, 4.f);
+
+        DrawDebugPoint(World,
+            FVector(Curr.X, Y, Curr.Y),
+            6.f, FColor::Red, false, DebugDuration);
+
+        Prev = Curr;
+    }
+
+    // Bord gauche
+    const FVector Loc = GetActorLocation();
+    float BottomZ = Loc.Z - MapWorldSize.Y * 0.5f;
+    FVector2D TopLeft = PixelToWorld(0.f, (float)GetSurfacePixelY(0));
+    FVector2D TopRight = PixelToWorld((float)(RTWidth - 1), (float)GetSurfacePixelY(RTWidth - 1));
+    DrawDebugLine(World, FVector(TopLeft.X, Y, TopLeft.Y), FVector(TopLeft.X, Y, BottomZ), FColor::Yellow, false, DebugDuration, 0, 3.f);
+    DrawDebugLine(World, FVector(TopRight.X, Y, TopRight.Y), FVector(TopRight.X, Y, BottomZ), FColor::Yellow, false, DebugDuration, 0, 3.f);
+    DrawDebugLine(World, FVector(TopLeft.X, Y, BottomZ), FVector(TopRight.X, Y, BottomZ), FColor::Yellow, false, DebugDuration, 0, 3.f);
+
+    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Debug dessine"));
 }
 
 // ============================================================
@@ -302,11 +339,11 @@ void ADestructibleMap::ApplyExplosion(FVector2D WorldPosition, float Radius)
 {
     if (!DestructionMask || !EraseMaterial) return;
 
+    // 1. VISUEL : peint un cercle noir sur le Render Target
     float U, V;
     ConvertWorldToUV(WorldPosition, U, V);
     float RadiusPx = (Radius / MapWorldSize.X) * RTWidth;
 
-    // 1. Peint le trou sur le Render Target (visuel)
     UCanvas* Canvas = nullptr;
     FVector2D CanvasSize;
     FDrawToRenderTargetContext Context;
@@ -318,62 +355,35 @@ void ADestructibleMap::ApplyExplosion(FVector2D WorldPosition, float Radius)
     {
         UMaterialInstanceDynamic* EraseInst =
             UMaterialInstanceDynamic::Create(EraseMaterial, this);
-
-        float CenterX = U * RTWidth;
-        float CenterY = V * RTHeight;
-        float Diam = RadiusPx * 2.f;
-
         Canvas->K2_DrawMaterial(EraseInst,
-            FVector2D(CenterX - RadiusPx, CenterY - RadiusPx),
-            FVector2D(Diam, Diam),
+            FVector2D(U * RTWidth - RadiusPx, V * RTHeight - RadiusPx),
+            FVector2D(RadiusPx * 2.f, RadiusPx * 2.f),
             FVector2D(0.f, 0.f), FVector2D(1.f, 1.f));
     }
 
     UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(GetWorld(), Context);
 
-    // 2. Met a jour le cache CPU (SolidPixels)
-    UpdatePixelsAfterExplosion(WorldPosition, Radius);
-
-    // 3. Reconstruit le mesh de collision avec le nouveau terrain
-    //    On ne reconstruit que la zone affectee pour les performances
-    RebuildCollisionMeshZone(WorldPosition, Radius);
-}
-
-// ============================================================
-//  UpdatePixelsAfterExplosion
-//  Marque les pixels dans le rayon comme vides
-// ============================================================
-void ADestructibleMap::UpdatePixelsAfterExplosion(FVector2D WorldPosition, float Radius)
-{
-    float U, V;
-    ConvertWorldToUV(WorldPosition, U, V);
-
+    // 2. MET A JOUR le cache CPU (SolidPixels)
     float CX = U * RTWidth;
     float CY = V * RTHeight;
-    float R = (Radius / MapWorldSize.X) * RTWidth;
-    float R2 = R * R;
+    float R2px = (Radius / MapWorldSize.X) * RTWidth;
+    R2px = R2px * R2px;
 
-    int32 MinX = FMath::Clamp((int32)(CX - R) - 1, 0, RTWidth - 1);
-    int32 MaxX = FMath::Clamp((int32)(CX + R) + 1, 0, RTWidth - 1);
-    int32 MinY = FMath::Clamp((int32)(CY - R) - 1, 0, RTHeight - 1);
-    int32 MaxY = FMath::Clamp((int32)(CY + R) + 1, 0, RTHeight - 1);
+    int32 MinX = FMath::Clamp((int32)(CX - RadiusPx) - 1, 0, RTWidth - 1);
+    int32 MaxX = FMath::Clamp((int32)(CX + RadiusPx) + 1, 0, RTWidth - 1);
+    int32 MinY = FMath::Clamp((int32)(CY - RadiusPx) - 1, 0, RTHeight - 1);
+    int32 MaxY = FMath::Clamp((int32)(CY + RadiusPx) + 1, 0, RTHeight - 1);
 
     for (int32 PY = MinY; PY <= MaxY; PY++)
-        for (int32 PX = MinX; PX <= MaxX; PX++)
-            if ((PX - CX) * (PX - CX) + (PY - CY) * (PY - CY) <= R2)
-                SolidPixels[PY * RTWidth + PX] = false;
-}
+        for (int32 PX2 = MinX; PX2 <= MaxX; PX2++)
+            if ((PX2 - CX) * (PX2 - CX) + (PY - CY) * (PY - CY) <= R2px)
+                SolidPixels[PY * RTWidth + PX2] = false;
 
-// ============================================================
-//  RebuildCollisionMeshZone
-//  Reconstruit SEULEMENT la zone autour de l'explosion
-//  Plus performant que tout reconstruire
-// ============================================================
-void ADestructibleMap::RebuildCollisionMeshZone(FVector2D WorldPosition, float Radius)
-{
-    // Pour simplifier on reconstruit tout le mesh
-    // Pour une version optimisee on pourrait ne reconstruire qu'une section
-    // Mais avec CollisionStep=4 et 2048px => -512 quads, c'est tres rapide
+    // 3. RECONSTRUIT la collision (tout le mesh, rapide avec ContourStep >= 8)
     CollisionMesh->ClearAllMeshSections();
     RebuildCollisionMesh();
+
+    // 4. Redessine le debug si actif
+    if (bShowDebugCollision)
+        DrawDebugCollision();
 }
