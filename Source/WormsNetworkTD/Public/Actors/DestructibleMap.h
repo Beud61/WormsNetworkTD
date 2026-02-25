@@ -1,11 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Engine/TextureRenderTarget2D.h"
-#include "Components/BoxComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "DestructibleMap.generated.h"
 
 UCLASS()
@@ -17,69 +15,61 @@ public:
     ADestructibleMap();
     virtual void BeginPlay() override;
 
-    // Declenche une explosion a une position World (X = horizontal, Y = vertical)
+    // Declenche une explosion
     UFUNCTION(BlueprintCallable, Category = "Destruction")
     void ApplyExplosion(FVector2D WorldPosition, float Radius);
 
-    // Verifie si un point World est dans le terrain solide
+    // Verifie si un point est dans le terrain solide
     UFUNCTION(BlueprintCallable, Category = "Destruction")
     bool IsSolid(FVector2D WorldPosition) const;
 
-    // Lit les pixels du RT cote CPU (a appeler apres une explosion)
-    UFUNCTION(BlueprintCallable, Category = "Destruction")
-    void RefreshPixelData();
-
 protected:
-    // Le PNG de la map
     UPROPERTY(EditAnywhere, Category = "Map")
     TObjectPtr<UTexture2D> MapTexture;
 
-    // Le material applique au plane (doit avoir MapTexture + DestructionMask)
     UPROPERTY(EditAnywhere, Category = "Map")
     TObjectPtr<UMaterialInterface> MapMaterial;
 
-    // Material pour peindre les trous (cercle noir, voir guide BP)
     UPROPERTY(EditAnywhere, Category = "Map")
     TObjectPtr<UMaterialInterface> EraseMaterial;
 
-    // Taille de la map en units UE (cm). Adapte a ton plane existant.
     UPROPERTY(EditAnywhere, Category = "Map")
     FVector2D MapWorldSize = FVector2D(4096.f, 1024.f);
 
-    // Combien de cellules de collision en X et Y
+    // Simplifie le contour : 1 = chaque pixel, 4 = 1 point tous les 4 pixels
+    // Plus c'est grand, moins de polygones mais moins precis
     UPROPERTY(EditAnywhere, Category = "Map|Collision")
-    int32 CollisionCellsX = 64;
+    int32 CollisionStep = 4;
 
-    UPROPERTY(EditAnywhere, Category = "Map|Collision")
-    int32 CollisionCellsY = 16;
-
-    // Le mesh plane qui affiche la map
+    // Le mesh visuel (plane)
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map")
     TObjectPtr<UStaticMeshComponent> MapMesh;
 
+    // Le mesh de collision procedural (invisible, juste pour la physique)
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map")
+    TObjectPtr<UProceduralMeshComponent> CollisionMesh;
+
 private:
-    // Render Target = masque de destruction (blanc = solide, noir = trou)
     UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> DestructionMask;
 
-    // Instance dynamique du material
     UPROPERTY()
     TObjectPtr<UMaterialInstanceDynamic> MapMatInstance;
 
-    // Resolution du Render Target (mis a jour depuis la texture)
     int32 RTWidth = 2048;
     int32 RTHeight = 512;
 
-    // Cache CPU du masque pour IsSolid() (mis a jour par RefreshPixelData)
-    TArray<FColor> MaskPixels;
-    bool bPixelDataDirty = false;
+    // Cache CPU : true = solide, false = vide
+    TArray<bool> SolidPixels;
 
-    // Grille de BoxColliders representant le terrain
-    TArray<TObjectPtr<UBoxComponent>> CollisionBoxes;
-
-    // --- Fonctions internes ---
     void InitRenderTarget();
-    void GenerateInitialCollision();
-    void UpdateCollisionAfterExplosion(FVector2D WorldPosition, float Radius);
+    void BuildPixelDataFromTexture();
+    void RebuildCollisionMesh();
+    void UpdatePixelsAfterExplosion(FVector2D WorldPosition, float Radius);
     void ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const;
+    FVector2D UVToWorld(float U, float V) const;
+
+    // Trouve la hauteur du terrain a une colonne X en pixels
+    int32 GetSurfaceY(int32 PixelX) const;
+    void RebuildCollisionMeshZone(FVector2D WorldPosition, float Radius);
 };
