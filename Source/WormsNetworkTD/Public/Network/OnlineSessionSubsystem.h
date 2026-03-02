@@ -7,44 +7,31 @@
 #include "Beacon/LobbyTypes.h"
 #include "OnlineSessionSubsystem.generated.h"
 
-// Forward declaration pour éviter l'inclusion circulaire
 class ALobbyBeaconClient;
 class AOnlineBeaconHost;
 
 // ============================================================
-//  Struct de session custom exposée à l'UI
+//  Struct session exposée à l'UI
 // ============================================================
 USTRUCT(BlueprintType)
 struct FCustomSessionInfo
 {
 	GENERATED_USTRUCT_BODY()
 
-	UPROPERTY(BlueprintReadOnly)
-	FString SessionName = TEXT("");
-
-	UPROPERTY(BlueprintReadOnly)
-	int32 CurrentPlayers = 0;
-
-	UPROPERTY(BlueprintReadOnly)
-	int32 MaxPlayers = 0;
-
-	UPROPERTY(BlueprintReadOnly)
-	int32 Ping = 0;
-
-	// Index dans le tableau SearchResults — utilisé pour rejoindre la session
-	UPROPERTY(BlueprintReadOnly)
-	int32 SessionSearchResultIndex = 0;
-
-	UPROPERTY(BlueprintReadOnly)
-	FString GameMode = TEXT("");
+	UPROPERTY(BlueprintReadOnly) FString SessionName = TEXT("");
+	UPROPERTY(BlueprintReadOnly) int32   CurrentPlayers = 0;
+	UPROPERTY(BlueprintReadOnly) int32   MaxPlayers = 0;
+	UPROPERTY(BlueprintReadOnly) int32   Ping = 0;
+	UPROPERTY(BlueprintReadOnly) int32   SessionSearchResultIndex = 0;
+	UPROPERTY(BlueprintReadOnly) FString GameMode = TEXT("");
+	UPROPERTY(BlueprintReadOnly) FString HostIP = TEXT("");  // <- NOUVEAU
 };
 
 // ============================================================
 //  Delegates
 // ============================================================
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFindGameSessionsComplete,
-	const TArray<FCustomSessionInfo>&, SessionResults,
-	bool, Successful);
+	const TArray<FCustomSessionInfo>&, SessionResults, bool, Successful);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSessionJoinCompleted,
 	bool, bWasSuccessful);
@@ -54,6 +41,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBeaconClientCreated,
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLobbysUpdated,
 	const TArray<FPlayerLobbyInfo>&, Players);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnHostBeaconReady);
 
 // ============================================================
 //  Subsystem
@@ -68,35 +57,10 @@ protected:
 	virtual void Deinitialize() override;
 
 public:
-	// ----- Interface de session -----
-	IOnlineSessionPtr Session;
-	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
-
-	// ----- Création de session -----
-	FDelegateHandle CreateHandle;
-	void OnCreateSessionCompleted(FName SessionName, bool Successful);
-
-	// ----- Recherche de session -----
-	FDelegateHandle FindHandle;
-	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
-	TArray<FOnlineSessionSearchResult> SearchResults;
-	void OnFindSessionsCompleted(bool Successful);
-
-	// ----- Join session (classique, voyage réseau) -----
-	void JoinGameSession(const FOnlineSessionSearchResult& SessionResult);
-	FDelegateHandle JoinHandle;
-	void OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
-
-	// ----- Destroy session -----
-	FDelegateHandle DestroyHandle;
-	void OnDestroySessionCompleted(FName SessionName, bool Successful);
-
-	// ----- Update session -----
-	FDelegateHandle UpdateHandle;
-	void OnUpdateSessionCompleted(FName SessionName, bool Successful);
-
-public:
-	// ----- API publique -----
+	// ============================================================
+	//  API publique
+	// ============================================================
+	bool bIsHost = false;
 
 	UFUNCTION(BlueprintCallable, Category = "Session")
 	void CreateSession(const FString& SessionName, int32 NumPublicConnections, bool bIsLanMatch,
@@ -105,86 +69,98 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Session")
 	void FindSessions(int32 MaxSearchResults, bool bIsLANQuery);
 
-	UPROPERTY(BlueprintAssignable, Category = "Session")
-	FOnFindGameSessionsComplete OnFindSessionsCompleteEvent;
-
 	/**
-	 * Rejoint une session via Beacon (pas de ServerTravel immédiat).
-	 * Le beacon sert à valider la réservation et synchroniser le lobby.
+	 * Rejoint une session via Beacon.
+	 * Résout l'IP depuis les settings de session (Key_HostIP) pour
+	 * fonctionner correctement avec le NULL OSS sur vrai réseau LAN.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Session")
-	void CustomJoinSession(const FCustomSessionInfo& SessionInfo);
+	void JoinLobby(const FCustomSessionInfo& SessionInfo);
 
 	UFUNCTION(BlueprintCallable, Category = "Session")
 	void DestroySession();
 
-	/** Crée/met à jour un setting custom dans la session en cours. */
+	/** Lance la partie (ServerTravel) — appelé uniquement par l'hôte. */
+	UFUNCTION(BlueprintCallable, Category = "Session")
+	void StartGame();
+
+	/** Déconnecte le client du beacon et quitte le lobby proprement. */
+	UFUNCTION(BlueprintCallable, Category = "Session")
+	void LeaveBeaconLobby();
+
+	/** Mise à jour d'un setting custom (template — défini dans le .h pour éviter les erreurs de linker). */
 	template<typename ValueType>
 	void UpdateCustomSetting(const FName& KeyName, const ValueType& Value,
-		EOnlineDataAdvertisementType::Type InType);
+		EOnlineDataAdvertisementType::Type InType)
+	{
+		if (!Session.IsValid() || !LastSessionSettings.IsValid())
+			return;
 
-	/** Spawn le beacon host côté serveur. Idempotent (ne respawne pas si déjà actif). */
-	UFUNCTION(BlueprintCallable)
-	void CreateHostBeacon();
+		TSharedPtr<FOnlineSessionSettings> UpdatedSettings =
+			MakeShareable(new FOnlineSessionSettings(*LastSessionSettings));
+		UpdatedSettings->Set(KeyName, Value, InType);
 
-	/**
-	 * Connecte l'hôte à son propre beacon en tant que client.
-	 * Appelé automatiquement après CreateHostBeacon() pour que l'hôte
-	 * envoie ses propres FPlayerLobbyInfo et apparaisse dans la liste du lobby.
-	 * @param HostInfo  Informations du joueur hôte à enregistrer.
-	 */
-	void ConnectHostAsClient(const FPlayerLobbyInfo& HostInfo);
+		UpdateHandle = Session->AddOnUpdateSessionCompleteDelegate_Handle(
+			FOnUpdateSessionCompleteDelegate::CreateUObject(
+				this, &UOnlineSessionSubsystem::OnUpdateSessionCompleted));
 
-	// ----- Delegates publics -----
+		if (!Session->UpdateSession(NAME_GameSession, *UpdatedSettings))
+		{
+			Session->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateHandle);
+			return;
+		}
 
-	UPROPERTY(BlueprintAssignable)
-	FOnSessionJoinCompleted OnSessionJoinCompleted;
+		// Mis à jour uniquement si UpdateSession accepte la requête
+		LastSessionSettings = UpdatedSettings;
+	}
 
-	UPROPERTY(BlueprintAssignable)
-	FOnBeaconClientCreated OnBeaconClientCreated;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnLobbysUpdated OnLobbysUpdated;
-
-	// ----- Accesseurs beacon client -----
-
-	UFUNCTION()
+	void SetHostPlayerInfo(const FPlayerLobbyInfo& Info) { PendingHostPlayerInfo = Info; }
 	ALobbyBeaconClient* GetLobbyBeaconClient() const { return LobbyBeaconClient; }
 
-	// ----- État interne -----
+	// ============================================================
+	//  Delegates publics
+	// ============================================================
 
-	int32 MaxPlayers = 0;
+	UPROPERTY(BlueprintAssignable) FOnFindGameSessionsComplete OnFindSessionsCompleteEvent;
+	UPROPERTY(BlueprintAssignable) FOnSessionJoinCompleted     OnSessionJoinCompleted;
+	UPROPERTY(BlueprintAssignable) FOnBeaconClientCreated      OnBeaconClientCreated;
+	UPROPERTY(BlueprintAssignable) FOnLobbysUpdated            OnLobbysUpdated;
+	UPROPERTY(BlueprintAssignable) FOnHostBeaconReady          OnHostBeaconReady;
+
+	// ============================================================
+	//  État
+	// ============================================================
+	IOnlineSessionPtr                  Session;
+	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
+	TArray<FOnlineSessionSearchResult> SearchResults;
+	int32                              MaxPlayers = 0;
 
 private:
-	/** Beacon host (côté serveur uniquement). */
-	UPROPERTY()
-	AOnlineBeaconHost* BeaconHost = nullptr;
+	// ----- Beacon -----
+	UPROPERTY() AOnlineBeaconHost* BeaconHost = nullptr;
+	UPROPERTY() ALobbyBeaconClient* LobbyBeaconClient = nullptr;
+	bool                              bBeaconConnecting = false;
 
-	/** Beacon client (côté joueur rejoignant). */
-	UPROPERTY()
-	ALobbyBeaconClient* LobbyBeaconClient = nullptr;
+	// ----- Delegates handles -----
+	FDelegateHandle CreateHandle;
+	FDelegateHandle FindHandle;
+	FDelegateHandle DestroyHandle;
+	FDelegateHandle UpdateHandle;
 
-	/** Évite les doubles connexions beacon. */
-	bool bBeaconConnecting = false;
+	// ----- État interne -----
+	FPlayerLobbyInfo                   PendingHostPlayerInfo;
+	TSharedPtr<FOnlineSessionSearch>   LastSessionSearch;
 
-	/**
-	 * Informations du joueur hôte, stockées entre CreateSession() et
-	 * la connexion beacon. Doit être rempli par l'UI via SetHostPlayerInfo()
-	 * AVANT d'appeler CreateSession().
-	 */
-	FPlayerLobbyInfo PendingHostPlayerInfo;
+	// ----- Callbacks internes -----
+	void OnCreateSessionCompleted(FName SessionName, bool Successful);
+	void OnFindSessionsCompleted(bool Successful);
+	void OnDestroySessionCompleted(FName SessionName, bool Successful);
+	void OnUpdateSessionCompleted(FName SessionName, bool Successful);
 
-	/** Relais interne : propage les mises à jour lobby au delegate public. */
-	UFUNCTION()
-	void HandleLobbyUpdated_Internal(const TArray<FPlayerLobbyInfo>& Players);
-
-	/** Nettoyage du beacon client (disconnect + destroy). */
+	void CreateHostBeacon();
+	void ConnectAsBeaconClient(const FString& HostIP, const FPlayerLobbyInfo& PlayerInfo);
 	void CleanupBeaconClient();
 
-public:
-	/**
-	 * Doit être appelé par l'UI avant CreateSession() pour que l'hôte
-	 * apparaisse correctement dans la liste du lobby.
-	 */
-	void SetHostPlayerInfo(const FPlayerLobbyInfo& Info) { PendingHostPlayerInfo = Info; }
+	UFUNCTION()
+	void HandleLobbyUpdated_Internal(const TArray<FPlayerLobbyInfo>& Players);
 };

@@ -20,10 +20,8 @@ void UUIMenu::NativeConstruct()
 	{
 		SessionSubsystem->OnFindSessionsCompleteEvent.AddDynamic(this, &UUIMenu::HandleFindSessionsCompleted);
 		SessionSubsystem->OnLobbysUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
-
-		// HandleBeaconCreated est connecté ici (une seule fois) pour rebinder OnLobbyUpdated
-		// si le BeaconClient est recréé après un CustomJoinSession
 		SessionSubsystem->OnBeaconClientCreated.AddDynamic(this, &UUIMenu::HandleBeaconCreated);
+		SessionSubsystem->OnSessionJoinCompleted.AddDynamic(this, &UUIMenu::HandleSessionJoinCompleted);
 	}
 	else
 	{
@@ -34,76 +32,38 @@ void UUIMenu::NativeConstruct()
 }
 
 // ============================================================
-//  Setup des bindings
+//  Setup des bindings boutons
 // ============================================================
 
 void UUIMenu::SetupMenu()
 {
-	// === MENU PRINCIPAL ===
-	if (Btn_CreateRoom)
-		Btn_CreateRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCreateRoomClicked);
+	// Menu principal
+	if (Btn_CreateRoom) Btn_CreateRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCreateRoomClicked);
+	if (Btn_JoinRoom)   Btn_JoinRoom->OnClicked.AddDynamic(this, &UUIMenu::OnJoinRoomClicked);
+	if (Btn_FindRoom)   Btn_FindRoom->OnClicked.AddDynamic(this, &UUIMenu::OnFindRoomClicked);
+	if (Btn_Settings)   Btn_Settings->OnClicked.AddDynamic(this, &UUIMenu::OnSettingsClicked);
+	if (Btn_Quit)       Btn_Quit->OnClicked.AddDynamic(this, &UUIMenu::OnQuitClicked);
 
-	if (Btn_JoinRoom)
-		Btn_JoinRoom->OnClicked.AddDynamic(this, &UUIMenu::OnJoinRoomClicked);
+	// Create Room / Lobby
+	if (Btn_CloseCreateRoomSettings) Btn_CloseCreateRoomSettings->OnClicked.AddDynamic(this, &UUIMenu::OnCloseCreateRoomSettingsClicked);
+	if (Btn_OpenRoom)                Btn_OpenRoom->OnClicked.AddDynamic(this, &UUIMenu::OnOpenRoomClicked);
+	if (Btn_CloseRoom)               Btn_CloseRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCloseRoomClicked);
+	if (Btn_StartGame)               Btn_StartGame->OnClicked.AddDynamic(this, &UUIMenu::OnStartGameClicked);
+	if (Btn_QuitLobby)               Btn_QuitLobby->OnClicked.AddDynamic(this, &UUIMenu::OnQuitLobbyClicked);
 
-	if (Btn_FindRoom)
-		Btn_FindRoom->OnClicked.AddDynamic(this, &UUIMenu::OnFindRoomClicked);
+	if (GameModeChoice)   GameModeChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnGameModeChanged);
+	if (WaterRisingChoice) WaterRisingChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnWaterRisingChanged);
+	if (UnitLifeChoice)   UnitLifeChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnUnitLifeChanged);
+	if (UnitCountChoice)  UnitCountChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnUnitCountChanged);
 
-	if (Btn_Settings)
-		Btn_Settings->OnClicked.AddDynamic(this, &UUIMenu::OnSettingsClicked);
+	// Find Room
+	if (Btn_CloseFindRoom) Btn_CloseFindRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCloseFindRoomClicked);
+	if (Btn_Refresh)       Btn_Refresh->OnClicked.AddDynamic(this, &UUIMenu::OnRefreshRoomsClicked);
+	if (CheckBox_All)      CheckBox_All->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxAllClicked);
+	if (CheckBox_1V1)      CheckBox_1V1->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBox1V1Clicked);
+	if (CheckBox_2V2)      CheckBox_2V2->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBox2V2Clicked);
+	if (CheckBox_FFA)      CheckBox_FFA->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxFFAClicked);
 
-	if (Btn_Quit)
-		Btn_Quit->OnClicked.AddDynamic(this, &UUIMenu::OnQuitClicked);
-
-	// === CREATE ROOM ===
-	if (Btn_CloseCreateRoomSettings)
-		Btn_CloseCreateRoomSettings->OnClicked.AddDynamic(this, &UUIMenu::OnCloseCreateRoomSettingsClicked);
-
-	if (Btn_OpenRoom)
-		Btn_OpenRoom->OnClicked.AddDynamic(this, &UUIMenu::OnOpenRoomClicked);
-
-	if (Btn_CloseRoom)
-		Btn_CloseRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCloseRoomClicked);
-
-	if (Btn_StartGame)
-		Btn_StartGame->OnClicked.AddDynamic(this, &UUIMenu::OnStartGameClicked);
-
-	if (GameModeChoice)
-		GameModeChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnGameModeChanged);
-
-	if (WaterRisingChoice)
-		WaterRisingChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnWaterRisingChanged);
-
-	if (UnitLifeChoice)
-		UnitLifeChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnUnitLifeChanged);
-
-	if (UnitCountChoice)
-		UnitCountChoice->OnSelectionChanged.AddDynamic(this, &UUIMenu::OnUnitCountChanged);
-
-	// Btn_QuitLobby : bindé ici une seule fois, pas dans HideRoomSettingsForJoiningPlayer
-	if (Btn_QuitLobby)
-		Btn_QuitLobby->OnClicked.AddDynamic(this, &UUIMenu::OnQuitLobbyClicked);
-
-	// === FIND ROOM ===
-	if (Btn_CloseFindRoom)
-		Btn_CloseFindRoom->OnClicked.AddDynamic(this, &UUIMenu::OnCloseFindRoomClicked);
-
-	if (Btn_Refresh)
-		Btn_Refresh->OnClicked.AddDynamic(this, &UUIMenu::OnRefreshRoomsClicked);
-
-	if (CheckBox_All)
-		CheckBox_All->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxAllClicked);
-
-	if (CheckBox_1V1)
-		CheckBox_1V1->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBox1V1Clicked);
-
-	if (CheckBox_2V2)
-		CheckBox_2V2->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBox2V2Clicked);
-
-	if (CheckBox_FFA)
-		CheckBox_FFA->OnCheckStateChanged.AddDynamic(this, &UUIMenu::OnCheckBoxFFAClicked);
-
-	// Affiche le menu principal et le curseur
 	ShowMainMenu();
 
 	if (APlayerController* PC = GetOwningPlayer())
@@ -124,43 +84,34 @@ void UUIMenu::OnCreateRoomClicked()
 
 void UUIMenu::OnJoinRoomClicked()
 {
-	// Quick Join : on cherche les sessions et on rejoint la première trouvée
+	// Quick Join : rejoint la première session disponible
 	bIsQuickJoin = true;
 	if (SessionSubsystem)
-	{
 		SessionSubsystem->FindSessions(LobbyConstants::MaxSearchResults, true);
-	}
 }
 
 void UUIMenu::OnFindRoomClicked()
 {
 	ShowFindRoom();
-
-	// Réinitialise le filtre sur "Tous"
 	OnCheckBoxAllClicked(true);
 
 	if (SessionSubsystem)
-	{
 		SessionSubsystem->FindSessions(LobbyConstants::MaxSearchResults, true);
-	}
 }
 
 void UUIMenu::OnSettingsClicked()
 {
-	// TODO: implémenter le panneau de settings
 	UE_LOG(LogTemp, Warning, TEXT("Settings: non implemente."));
 }
 
 void UUIMenu::OnQuitClicked()
 {
 	if (APlayerController* PC = GetOwningPlayer())
-	{
 		UKismetSystemLibrary::QuitGame(GetWorld(), PC, EQuitPreference::Quit, false);
-	}
 }
 
 // ============================================================
-//  CALLBACKS — CREATE ROOM
+//  CALLBACKS — CREATE ROOM / LOBBY
 // ============================================================
 
 void UUIMenu::OnCloseCreateRoomSettingsClicked()
@@ -173,22 +124,18 @@ void UUIMenu::OnOpenRoomClicked()
 	if (!SessionSubsystem)
 		return;
 
-	const int32 MaxPlayers = GetMaxPlayersForGameMode(SelectedGameMode);
-
-	// Prépare les infos de l'hôte AVANT CreateSession() pour qu'elles soient
-	// disponibles dès que le beacon host est prêt et se connecte à lui-même.
-	// TODO: remplacer PlayerName par le vrai nom depuis le GameInstance / profil.
+	// Infos hôte — TODO: lire depuis le GameInstance / profil utilisateur
 	FPlayerLobbyInfo HostInfo;
 	HostInfo.PlayerName = TEXT("Player 1");
 	HostInfo.UnitNB = SelectedUnitCount;
 	HostInfo.ProfileIcon = 0;
 	HostInfo.TeamIcon = 0;
-	HostInfo.PlayerId = static_cast<int32>(FPlatformTime::Cycles() & 0x7FFFFFFF);
+	HostInfo.PlayerId = FMath::RandRange(1, INT32_MAX);
 	SessionSubsystem->SetHostPlayerInfo(HostInfo);
 
 	SessionSubsystem->CreateSession(
 		TEXT("MyGameSession"),
-		MaxPlayers,
+		GetMaxPlayersForGameMode(SelectedGameMode),
 		true,
 		SelectedGameMode,
 		SelectedUnitLife,
@@ -196,41 +143,25 @@ void UUIMenu::OnOpenRoomClicked()
 		SelectedTurnsBeforeWater
 	);
 
-	// L'UI des joueurs sera peuplée par HandleLobbyUpdated() dès que le beacon
-	// de l'hôte aura validé sa connexion locale et diffusé ConnectedPlayers.
-	// On n'ajoute donc plus le widget hôte manuellement ici.
-
-	// Statut de la room : en attente de la confirmation beacon (on reste à 0
-	// joueur visuellement jusqu'au premier HandleLobbyUpdated).
+	// Statut visuel : en attente de la confirmation beacon
 	UpdateRoomStatusUI(true, 0);
 
-	// Passe en mode "room ouverte" : verrouille les settings, affiche Fermer
-	if (Settings)
-		Settings->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (Btn_OpenRoom)
-		Btn_OpenRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (Btn_CloseRoom)
-		Btn_CloseRoom->SetVisibility(ESlateVisibility::Visible);
+	if (Settings)    Settings->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Btn_OpenRoom) Btn_OpenRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Btn_CloseRoom) Btn_CloseRoom->SetVisibility(ESlateVisibility::Visible);
 }
 
 void UUIMenu::OnCloseRoomClicked()
 {
-	// TODO : kick des joueurs présents dans la room avant de détruire
-
-	if (VB_PlayersInfos)
-		VB_PlayersInfos->ClearChildren();
+	if (VB_PlayersInfos) VB_PlayersInfos->ClearChildren();
 	PlayersInfosUI.Empty();
 	FoundSessions.Empty();
 
 	UpdateRoomStatusUI(false, 0);
 
-	// Remet la room en mode "fermé"
-	if (Settings)
-		Settings->SetVisibility(ESlateVisibility::Visible);
-	if (Btn_OpenRoom)
-		Btn_OpenRoom->SetVisibility(ESlateVisibility::Visible);
-	if (Btn_CloseRoom)
-		Btn_CloseRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Settings)    Settings->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_OpenRoom) Btn_OpenRoom->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_CloseRoom) Btn_CloseRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
 
 	if (SessionSubsystem)
 		SessionSubsystem->DestroySession();
@@ -238,17 +169,21 @@ void UUIMenu::OnCloseRoomClicked()
 
 void UUIMenu::OnStartGameClicked()
 {
-	// TODO : vérifier que la room est pleine avant de lancer la partie.
-	if (ACustomPlayerController* PC = Cast<ACustomPlayerController>(GetOwningPlayer()))
-	{
-		PC->Server_StartGame();
-	}
+	if (!SessionSubsystem)
+		return;
+
+	SessionSubsystem->StartGame();
 }
 
 void UUIMenu::OnQuitLobbyClicked()
 {
-	// TODO : envoyer un message au host pour libérer le slot, puis nettoyer
-	UE_LOG(LogTemp, Warning, TEXT("OnQuitLobbyClicked: quitter le lobby."));
+	if (SessionSubsystem)
+		SessionSubsystem->LeaveBeaconLobby();
+
+	// Nettoie l'UI du lobby
+	if (VB_PlayersInfos) VB_PlayersInfos->ClearChildren();
+	PlayersInfosUI.Empty();
+
 	ShowMainMenu();
 }
 
@@ -279,7 +214,6 @@ void UUIMenu::OnUnitCountChanged(FString SelectedItem, ESelectInfo::Type Selecti
 void UUIMenu::OnCloseFindRoomClicked()
 {
 	ShowMainMenu();
-	OnCheckBoxAllClicked(true);
 }
 
 void UUIMenu::OnCheckBoxAllClicked(bool bIsChecked)
@@ -288,63 +222,42 @@ void UUIMenu::OnCheckBoxAllClicked(bool bIsChecked)
 	bCheckBox1V1 = false;
 	bCheckBox2V2 = false;
 	bCheckBoxFFA = false;
-
-	if (CheckBox_All) CheckBox_All->SetIsChecked(bCheckBoxAll);
-	if (CheckBox_1V1) CheckBox_1V1->SetIsChecked(bCheckBox1V1);
-	if (CheckBox_2V2) CheckBox_2V2->SetIsChecked(bCheckBox2V2);
-	if (CheckBox_FFA) CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+	SyncCheckBoxVisuals();
 }
 
 void UUIMenu::OnCheckBox1V1Clicked(bool bIsChecked)
 {
-	bCheckBox1V1 = true;
-	bCheckBoxAll = false;
+	bCheckBox1V1 = bIsChecked;  // <- respecte l'état réel (peut décocher)
+	if (bIsChecked) bCheckBoxAll = false;
 
-	// Si tous les modes spécifiques sont cochés -> retombe sur "Tous"
-	if (bCheckBox1V1 && bCheckBox2V2 && bCheckBoxFFA)
+	// Si rien n'est coché -> retombe sur "Tous"
+	if (!bCheckBox1V1 && !bCheckBox2V2 && !bCheckBoxFFA)
 	{
-		OnCheckBoxAllClicked(true);
-		return;
+		bCheckBoxAll = true;
 	}
-
-	if (CheckBox_All) CheckBox_All->SetIsChecked(bCheckBoxAll);
-	if (CheckBox_1V1) CheckBox_1V1->SetIsChecked(bCheckBox1V1);
-	if (CheckBox_2V2) CheckBox_2V2->SetIsChecked(bCheckBox2V2);
-	if (CheckBox_FFA) CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+	SyncCheckBoxVisuals();
 }
 
 void UUIMenu::OnCheckBox2V2Clicked(bool bIsChecked)
 {
-	bCheckBox2V2 = true;
-	bCheckBoxAll = false;
+	bCheckBox2V2 = bIsChecked;
+	if (bIsChecked) bCheckBoxAll = false;
 
-	if (bCheckBox1V1 && bCheckBox2V2 && bCheckBoxFFA)
-	{
-		OnCheckBoxAllClicked(true);
-		return;
-	}
+	if (!bCheckBox1V1 && !bCheckBox2V2 && !bCheckBoxFFA)
+		bCheckBoxAll = true;
 
-	if (CheckBox_All) CheckBox_All->SetIsChecked(bCheckBoxAll);
-	if (CheckBox_1V1) CheckBox_1V1->SetIsChecked(bCheckBox1V1);
-	if (CheckBox_2V2) CheckBox_2V2->SetIsChecked(bCheckBox2V2);
-	if (CheckBox_FFA) CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+	SyncCheckBoxVisuals();
 }
 
 void UUIMenu::OnCheckBoxFFAClicked(bool bIsChecked)
 {
-	bCheckBoxFFA = true;
-	bCheckBoxAll = false;
+	bCheckBoxFFA = bIsChecked;
+	if (bIsChecked) bCheckBoxAll = false;
 
-	if (bCheckBox1V1 && bCheckBox2V2 && bCheckBoxFFA)
-	{
-		OnCheckBoxAllClicked(true);
-		return;
-	}
+	if (!bCheckBox1V1 && !bCheckBox2V2 && !bCheckBoxFFA)
+		bCheckBoxAll = true;
 
-	if (CheckBox_All) CheckBox_All->SetIsChecked(bCheckBoxAll);
-	if (CheckBox_1V1) CheckBox_1V1->SetIsChecked(bCheckBox1V1);
-	if (CheckBox_2V2) CheckBox_2V2->SetIsChecked(bCheckBox2V2);
-	if (CheckBox_FFA) CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+	SyncCheckBoxVisuals();
 }
 
 void UUIMenu::OnRefreshRoomsClicked()
@@ -366,13 +279,15 @@ void UUIMenu::OnJoinLobbyClicked(int32 Index)
 	if (!FoundSessions.IsValidIndex(Index) || !SessionSubsystem)
 		return;
 
-	SelectedSessionIndex = Index;
-	SessionSubsystem->CustomJoinSession(FoundSessions[SelectedSessionIndex]);
-	HideRoomSettingsForJoiningPlayer();
+	// On désactive le bouton pour éviter un double-clic pendant la connexion
+	if (Btn_FindRoom) Btn_FindRoom->SetIsEnabled(false);
+
+	SessionSubsystem->JoinLobby(FoundSessions[Index]);
+	// L'UI lobby est affichée dans HandleSessionJoinCompleted (après confirmation beacon)
 }
 
 // ============================================================
-//  FONCTIONS UTILITAIRES — Affichage des panneaux
+//  AFFICHAGE DES PANNEAUX
 // ============================================================
 
 void UUIMenu::ShowMainMenu()
@@ -389,12 +304,14 @@ void UUIMenu::ShowCreateRoomSettings()
 	if (CreateRoomSettings) CreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
 
 	// Visibilité par défaut (hôte)
-	if (HostSettingsSecurity) HostSettingsSecurity->SetVisibility(ESlateVisibility::Collapsed);
-	if (Btn_QuitLobby)        Btn_QuitLobby->SetVisibility(ESlateVisibility::Collapsed);
-	if (Btn_StartGame)        Btn_StartGame->SetVisibility(ESlateVisibility::Visible);
-	if (Btn_CloseCreateRoomSettings) Btn_CloseCreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
+	if (HostSettingsSecurity)          HostSettingsSecurity->SetVisibility(ESlateVisibility::Collapsed);
+	if (Btn_QuitLobby)                 Btn_QuitLobby->SetVisibility(ESlateVisibility::Collapsed);
+	if (Btn_StartGame)                 Btn_StartGame->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_CloseCreateRoomSettings)   Btn_CloseCreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_OpenRoom)                  Btn_OpenRoom->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_CloseRoom)                 Btn_CloseRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Settings)                      Settings->SetVisibility(ESlateVisibility::Visible);
 
-	// Statut initial : room fermée
 	UpdateRoomStatusUI(false, 0);
 }
 
@@ -403,21 +320,25 @@ void UUIMenu::ShowFindRoom()
 	if (MenuPanel)          MenuPanel->SetVisibility(ESlateVisibility::Collapsed);
 	if (FindRoom)           FindRoom->SetVisibility(ESlateVisibility::Visible);
 	if (CreateRoomSettings) CreateRoomSettings->SetVisibility(ESlateVisibility::Collapsed);
+	if (Btn_FindRoom)       Btn_FindRoom->SetIsEnabled(true);
 }
 
-void UUIMenu::HideRoomSettingsForJoiningPlayer()
+void UUIMenu::ShowLobbyAsClient()
 {
-	// Réutilise ShowCreateRoomSettings pour la base, puis adapte pour un non-hôte
-	ShowCreateRoomSettings();
+	// Réutilise le panneau CreateRoomSettings mais en mode client (lecture seule)
+	if (MenuPanel)          MenuPanel->SetVisibility(ESlateVisibility::Collapsed);
+	if (FindRoom)           FindRoom->SetVisibility(ESlateVisibility::Collapsed);
+	if (CreateRoomSettings) CreateRoomSettings->SetVisibility(ESlateVisibility::Visible);
 
 	// Masque les contrôles réservés à l'hôte
-	if (HostSettingsSecurity) HostSettingsSecurity->SetVisibility(ESlateVisibility::Visible);
-	if (Btn_QuitLobby)        Btn_QuitLobby->SetVisibility(ESlateVisibility::Visible);
-	// Btn_QuitLobby est déjà bindé dans SetupMenu(), pas de AddDynamic ici
-	if (Btn_StartGame)        Btn_StartGame->SetVisibility(ESlateVisibility::Collapsed);
+	if (HostSettingsSecurity)        HostSettingsSecurity->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_QuitLobby)               Btn_QuitLobby->SetVisibility(ESlateVisibility::Visible);
+	if (Btn_StartGame)               Btn_StartGame->SetVisibility(ESlateVisibility::Collapsed);
 	if (Btn_CloseCreateRoomSettings) Btn_CloseCreateRoomSettings->SetVisibility(ESlateVisibility::Collapsed);
+	if (Btn_OpenRoom)                Btn_OpenRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Btn_CloseRoom)               Btn_CloseRoom->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Settings)                    Settings->SetVisibility(ESlateVisibility::HitTestInvisible);
 
-	// Room déjà ouverte côté hôte
 	UpdateRoomStatusUI(true, 0);
 }
 
@@ -430,11 +351,10 @@ void UUIMenu::CloseMenu()
 		PC->bShowMouseCursor = false;
 		PC->SetInputMode(FInputModeGameOnly());
 	}
-	UE_LOG(LogTemp, Warning, TEXT("UIMenu: menu ferme, retour au mode jeu."));
 }
 
 // ============================================================
-//  FONCTIONS UTILITAIRES — Room info UI
+//  ROOM INFO UI (Find Room)
 // ============================================================
 
 void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRoom,
@@ -454,7 +374,6 @@ void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRo
 	RoomInfoWidget->SessionIndex = SessionIndex;
 	RoomInfoWidget->PlayersText = FString::Printf(TEXT("Players : %d/%d"), PlayerInRoom, MaxPlayerInRoom);
 
-	// Texte du mode de jeu via les constantes partagées
 	if (RoomModeID >= 0 && RoomModeID <= 2)
 	{
 		RoomInfoWidget->RoomModeID = RoomModeID;
@@ -470,7 +389,7 @@ void UUIMenu::AddRoomInfoUI(FString RoomName, int32 RoomModeID, int32 PlayerInRo
 }
 
 // ============================================================
-//  FONCTIONS UTILITAIRES — Player info UI
+//  PLAYER INFO UI (Lobby)
 // ============================================================
 
 void UUIMenu::AddPlayerInfoUI(const FPlayerLobbyInfo& PlayerInfo)
@@ -502,8 +421,7 @@ void UUIMenu::UpdatePlayerCountText(int32 CurrentPlayers)
 
 	const int32 MaxPlayers = GetMaxPlayersForGameMode(SelectedGameMode);
 	Txt_PlayerNb->SetText(FText::FromString(
-		FString::Printf(TEXT("%d/%d"), CurrentPlayers, MaxPlayers)
-	));
+		FString::Printf(TEXT("%d/%d"), CurrentPlayers, MaxPlayers)));
 	Txt_PlayerNb->SetColorAndOpacity(FLinearColor::White);
 }
 
@@ -512,8 +430,7 @@ void UUIMenu::UpdateRoomStatusUI(bool bIsOpen, int32 CurrentPlayers)
 	if (Txt_Status)
 	{
 		Txt_Status->SetText(FText::FromString(
-			bIsOpen ? TEXT("Room Status : Open") : TEXT("Room Status : Closed")
-		));
+			bIsOpen ? TEXT("Room Status : Open") : TEXT("Room Status : Closed")));
 		Txt_Status->SetColorAndOpacity(bIsOpen ? FLinearColor::Green : FLinearColor::Red);
 	}
 
@@ -531,8 +448,16 @@ void UUIMenu::UpdateRoomStatusUI(bool bIsOpen, int32 CurrentPlayers)
 	}
 }
 
+void UUIMenu::SyncCheckBoxVisuals()
+{
+	if (CheckBox_All) CheckBox_All->SetIsChecked(bCheckBoxAll);
+	if (CheckBox_1V1) CheckBox_1V1->SetIsChecked(bCheckBox1V1);
+	if (CheckBox_2V2) CheckBox_2V2->SetIsChecked(bCheckBox2V2);
+	if (CheckBox_FFA) CheckBox_FFA->SetIsChecked(bCheckBoxFFA);
+}
+
 // ============================================================
-//  CALLBACKS DELEGATES — Session / Beacon
+//  DELEGATES SUBSYSTEM
 // ============================================================
 
 void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sessions, bool bWasSuccessful)
@@ -540,19 +465,20 @@ void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sess
 	if (!bWasSuccessful)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("HandleFindSessionsCompleted: recherche echouee."));
+		bIsQuickJoin = false;
 		return;
 	}
 
 	FoundSessions = Sessions;
 
-	// Quick Join : rejoindre automatiquement la première session disponible
+	// Quick Join : rejoint automatiquement la première session disponible
 	if (bIsQuickJoin)
 	{
 		bIsQuickJoin = false;
 		if (FoundSessions.Num() > 0)
 		{
-			SessionSubsystem->CustomJoinSession(FoundSessions[0]);
-			HideRoomSettingsForJoiningPlayer();
+			SessionSubsystem->JoinLobby(FoundSessions[0]);
+			// L'UI lobby sera affichée dans HandleSessionJoinCompleted
 		}
 		else
 		{
@@ -561,7 +487,7 @@ void UUIMenu::HandleFindSessionsCompleted(const TArray<FCustomSessionInfo>& Sess
 		return;
 	}
 
-	// Affichage normal dans la liste
+	// Affichage normal dans la liste Find Room
 	if (!FindRoomScrollBox)
 		return;
 
@@ -599,35 +525,42 @@ void UUIMenu::HandleLobbyUpdated(const TArray<FPlayerLobbyInfo>& Players)
 	if (!VB_PlayersInfos)
 		return;
 
-	// Reconstruit l'UI de la liste des joueurs
 	VB_PlayersInfos->ClearChildren();
 	PlayersInfosUI.Empty();
 
 	for (const FPlayerLobbyInfo& Player : Players)
-	{
 		AddPlayerInfoUI(Player);
-	}
 
 	UpdatePlayerCountText(Players.Num());
 }
 
 void UUIMenu::HandleBeaconCreated(ALobbyBeaconClient* BeaconClient)
 {
-	// BeaconClient est fourni directement par le delegate OnBeaconClientCreated.
-	// On rebinde OnLobbyUpdated au cas où le client aurait été recréé.
+	// Le subsystem relaie déjà les mises à jour via OnLobbysUpdated → HandleLobbyUpdated.
+	// Pas de binding direct supplémentaire ici pour éviter les callbacks dupliqués.
 	if (!IsValid(BeaconClient))
 	{
 		UE_LOG(LogTemp, Error, TEXT("HandleBeaconCreated: BeaconClient invalide."));
 		return;
 	}
+	UE_LOG(LogTemp, Warning, TEXT("HandleBeaconCreated: beacon client pret (%p)."), BeaconClient);
+}
 
-	// Évite de doubler le binding si HandleLobbyUpdated est déjà connecté via OnLobbysUpdated
-	// (le subsystem relaie déjà via HandleLobbyUpdated_Internal -> OnLobbysUpdated -> HandleLobbyUpdated)
-	// Ce binding direct est conservé comme filet de sécurité si le subsystem n'est pas disponible.
-	if (!BeaconClient->OnLobbyUpdated.IsAlreadyBound(this, &UUIMenu::HandleLobbyUpdated))
+void UUIMenu::HandleSessionJoinCompleted(bool bWasSuccessful)
+{
+	if (Btn_FindRoom) Btn_FindRoom->SetIsEnabled(true);
+
+	if (!bWasSuccessful)
 	{
-		BeaconClient->OnLobbyUpdated.AddDynamic(this, &UUIMenu::HandleLobbyUpdated);
+		UE_LOG(LogTemp, Warning, TEXT("HandleSessionJoinCompleted: echec de connexion au lobby."));
+		ShowMainMenu();
+		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("HandleBeaconCreated: beacon client binde (%p)."), BeaconClient);
+	// L'hôte reste sur son écran (déjà affiché via ShowCreateRoomSettings)
+	// Seul le client bascule sur l'écran lobby en lecture seule
+	if (SessionSubsystem && !SessionSubsystem->bIsHost)
+	{
+		ShowLobbyAsClient();
+	}
 }

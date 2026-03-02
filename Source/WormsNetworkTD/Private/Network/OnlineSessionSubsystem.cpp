@@ -1,4 +1,4 @@
-#include "Network/OnlineSessionSubsystem.h"
+﻿#include "Network/OnlineSessionSubsystem.h"
 #include "Online/OnlineSessionNames.h"
 #include "OnlineSubsystemUtils.h"
 #include "Beacon/LobbyBeaconHostObject.h"
@@ -7,9 +7,10 @@
 #include "OnlineBeaconHost.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "SocketSubsystem.h"
 
 // ============================================================
-//  Initialisation / Nettoyage
+//  Initialisation
 // ============================================================
 
 void UOnlineSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -24,19 +25,8 @@ void UOnlineSessionSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-void UOnlineSessionSubsystem::CleanupBeaconClient()
-{
-	if (LobbyBeaconClient)
-	{
-		LobbyBeaconClient->OnLobbyUpdated.RemoveDynamic(this, &UOnlineSessionSubsystem::HandleLobbyUpdated_Internal);
-		LobbyBeaconClient->DestroyBeacon();
-		LobbyBeaconClient = nullptr;
-	}
-	bBeaconConnecting = false;
-}
-
 // ============================================================
-//  Cr�ation de session
+//  Création de session (côté hôte)
 // ============================================================
 
 void UOnlineSessionSubsystem::CreateSession(const FString& SessionName, int32 NumPublicConnections,
@@ -59,20 +49,35 @@ void UOnlineSessionSubsystem::CreateSession(const FString& SessionName, int32 Nu
 	LastSessionSettings->bIsLANMatch = bIsLanMatch;
 	LastSessionSettings->bShouldAdvertise = true;
 
-	LastSessionSettings->Set(LobbyConstants::Key_SessionName, SessionName, EOnlineDataAdvertisementType::ViaOnlineService);
+	LastSessionSettings->Set(LobbyConstants::Key_SessionName, SessionName, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	LastSessionSettings->Set(LobbyConstants::Key_GameMode, GameMode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	LastSessionSettings->Set(LobbyConstants::Key_UnitLife, UnitLife, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	LastSessionSettings->Set(LobbyConstants::Key_UnitCount, UnitCount, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	LastSessionSettings->Set(LobbyConstants::Key_TurnsBeforeWater, TurnsBeforeWater, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
-	CreateHandle = Session->AddOnCreateSessionCompleteDelegate_Handle(
-		FOnCreateSessionCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnCreateSessionCompleted)
-	);
+	// ── Clé HOST_IP ──────────────────────────────────────────────────────────
+	// On stocke l'IP locale de l'hôte dans les settings de session pour que
+	// les clients puissent la lire directement depuis le SearchResult, sans
+	// dépendre de GetResolvedConnectString (qui échoue avec le NULL OSS LAN).
+	// On récupère l'IP locale via ISocketSubsystem.
+	FString HostIP = TEXT("127.0.0.1");
+	bool    bCanBindAll = false;
+	TSharedPtr<FInternetAddr> LocalAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalHostAddr(*GLog, bCanBindAll);
+	if (LocalAddr.IsValid())
+	{
+		HostIP = LocalAddr->ToString(false); // false = sans le port
+		UE_LOG(LogTemp, Warning, TEXT("CreateSession: IP locale detectee = %s"), *HostIP);
+	}
+	LastSessionSettings->Set(LobbyConstants::Key_HostIP, HostIP, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	// ─────────────────────────────────────────────────────────────────────────
 
+	CreateHandle = Session->AddOnCreateSessionCompleteDelegate_Handle(
+		FOnCreateSessionCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnCreateSessionCompleted));
+	bIsHost = true;
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
 	if (!Session->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *LastSessionSettings))
 	{
-		UE_LOG(LogTemp, Error, TEXT("CreateSession: appel a CreateSession() echoue."));
+		UE_LOG(LogTemp, Error, TEXT("CreateSession: appel CreateSession() echoue."));
 		Session->ClearOnCreateSessionCompleteDelegate_Handle(CreateHandle);
 	}
 }
@@ -83,18 +88,16 @@ void UOnlineSessionSubsystem::OnCreateSessionCompleted(FName SessionName, bool S
 
 	if (!Successful)
 	{
-		UE_LOG(LogTemp, Error, TEXT("OnCreateSessionCompleted: echec de creation de session."));
+		UE_LOG(LogTemp, Error, TEXT("OnCreateSessionCompleted: echec."));
 		return;
 	}
 
-	// Enregistre le joueur local dans la session
+	// Enregistre le joueur local dans la session OSS
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
 	if (LocalPlayer && Session.IsValid())
-	{
 		Session->RegisterPlayer(NAME_GameSession, *LocalPlayer->GetPreferredUniqueNetId(), false);
-	}
 
-	// Session pr�te -> on d�marre le beacon host
+	// Démarre le beacon host et connecte l'hôte comme premier client
 	CreateHostBeacon();
 }
 
@@ -116,13 +119,12 @@ void UOnlineSessionSubsystem::FindSessions(int32 MaxSearchResults, bool bIsLANQu
 	LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
 
 	FindHandle = Session->AddOnFindSessionsCompleteDelegate_Handle(
-		FOnFindSessionsCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnFindSessionsCompleted)
-	);
+		FOnFindSessionsCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnFindSessionsCompleted));
 
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
 	if (!Session->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
 	{
-		UE_LOG(LogTemp, Error, TEXT("FindSessions: appel a FindSessions() echoue."));
+		UE_LOG(LogTemp, Error, TEXT("FindSessions: appel FindSessions() echoue."));
 		Session->ClearOnFindSessionsCompleteDelegate_Handle(FindHandle);
 	}
 }
@@ -137,179 +139,140 @@ void UOnlineSessionSubsystem::OnFindSessionsCompleted(bool Successful)
 	{
 		const FOnlineSessionSearchResult& Result = SearchResults[i];
 		FCustomSessionInfo Info;
+
 		Result.Session.SessionSettings.Get(LobbyConstants::Key_SessionName, Info.SessionName);
 		Result.Session.SessionSettings.Get(LobbyConstants::Key_GameMode, Info.GameMode);
-		Info.CurrentPlayers = Result.Session.SessionSettings.NumPublicConnections
-			- Result.Session.NumOpenPublicConnections;
+		Result.Session.SessionSettings.Get(LobbyConstants::Key_HostIP, Info.HostIP);   // <- lit l'IP stockée
+
+		Info.CurrentPlayers = Result.Session.SessionSettings.NumPublicConnections - Result.Session.NumOpenPublicConnections;
 		Info.MaxPlayers = Result.Session.SessionSettings.NumPublicConnections;
 		Info.Ping = Result.PingInMs;
 		Info.SessionSearchResultIndex = i;
+
 		SessionInfos.Add(Info);
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("FindSessions termine: %d resultat(s), succes=%d"),
-		SearchResults.Num(), Successful);
-
+	UE_LOG(LogTemp, Warning, TEXT("FindSessions: %d resultat(s), succes=%d"), SearchResults.Num(), Successful);
 	OnFindSessionsCompleteEvent.Broadcast(SessionInfos, Successful);
 }
 
 // ============================================================
-//  Join session classique (ServerTravel)
+//  Rejoindre un lobby via Beacon (côté client)
 // ============================================================
 
-void UOnlineSessionSubsystem::JoinGameSession(const FOnlineSessionSearchResult& SessionResult)
+void UOnlineSessionSubsystem::JoinLobby(const FCustomSessionInfo& SessionInfo)
 {
-	if (!Session.IsValid())
-	{
-		UE_LOG(LogTemp, Error, TEXT("JoinGameSession: Session interface invalide."));
-		return;
-	}
-
-	JoinHandle = Session->AddOnJoinSessionCompleteDelegate_Handle(
-		FOnJoinSessionCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnJoinSessionCompleted)
-	);
-
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	if (!Session->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, SessionResult))
-	{
-		UE_LOG(LogTemp, Error, TEXT("JoinGameSession: appel a JoinSession() echoue."));
-		Session->ClearOnJoinSessionCompleteDelegate_Handle(JoinHandle);
-	}
-}
-
-void UOnlineSessionSubsystem::OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
-{
-	Session->ClearOnJoinSessionCompleteDelegate_Handle(JoinHandle);
-
-	if (Result != EOnJoinSessionCompleteResult::Success)
-	{
-		UE_LOG(LogTemp, Error, TEXT("OnJoinSessionCompleted: echec (%d). Abandon du voyage."), (int32)Result);
-		OnSessionJoinCompleted.Broadcast(false);
-		return;
-	}
-
-	FString ConnectString;
-	if (!Session->GetResolvedConnectString(NAME_GameSession, ConnectString))
-	{
-		UE_LOG(LogTemp, Error, TEXT("OnJoinSessionCompleted: impossible de resoudre l'adresse de connexion."));
-		OnSessionJoinCompleted.Broadcast(false);
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("OnJoinSessionCompleted: succes, voyage vers %s"), *ConnectString);
-
-	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-	if (PlayerController)
-	{
-		PlayerController->ClientTravel(ConnectString, ETravelType::TRAVEL_Absolute);
-	}
-}
-
-// ============================================================
-//  Custom join via Beacon (lobby pr�-game)
-// ============================================================
-
-void UOnlineSessionSubsystem::CustomJoinSession(const FCustomSessionInfo& SessionInfo)
-{
-	UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: demarrage pour l'index %d"), SessionInfo.SessionSearchResultIndex);
-
-	if (!Session.IsValid() || !SearchResults.IsValidIndex(SessionInfo.SessionSearchResultIndex))
-	{
-		UE_LOG(LogTemp, Error, TEXT("CustomJoinSession: session invalide ou index hors limites."));
-		OnSessionJoinCompleted.Broadcast(false);
-		return;
-	}
+	UE_LOG(LogTemp, Warning, TEXT("JoinLobby: tentative pour l'index %d, IP=%s"),
+		SessionInfo.SessionSearchResultIndex, *SessionInfo.HostIP);
 
 	if (bBeaconConnecting)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: connexion beacon deja en cours, ignore."));
+		UE_LOG(LogTemp, Warning, TEXT("JoinLobby: connexion beacon deja en cours."));
 		return;
 	}
 
-	// Nettoie un �ventuel beacon client r�siduel
-	CleanupBeaconClient();
-
-	// Cr�e le beacon client
-	LobbyBeaconClient = GetWorld()->SpawnActor<ALobbyBeaconClient>();
-	if (!LobbyBeaconClient)
+	// L'IP est lue directement depuis les settings de session (Key_HostIP),
+	// pas besoin de GetResolvedConnectString → fonctionne avec le NULL OSS LAN.
+	FString HostIP = SessionInfo.HostIP;
+	if (HostIP.IsEmpty() || HostIP == TEXT("127.0.0.1"))
 	{
-		UE_LOG(LogTemp, Error, TEXT("CustomJoinSession: impossible de spawner le BeaconClient."));
+		UE_LOG(LogTemp, Error, TEXT("JoinLobby: IP hote invalide ('%s'). Abandon."), *HostIP);
 		OnSessionJoinCompleted.Broadcast(false);
 		return;
 	}
 
-	LobbyBeaconClient->SetActorHiddenInGame(true);
-	LobbyBeaconClient->SetActorEnableCollision(false);
-	LobbyBeaconClient->SetReplicates(true);
+	// Infos joueur par défaut — l'UI les mettra à jour via SetHostPlayerInfo
+	// ou directement via le beacon après connexion.
+	FPlayerLobbyInfo ClientInfo;
+	ClientInfo.PlayerName = TEXT("Player");
+	ClientInfo.PlayerId = FMath::RandRange(1, INT32_MAX);
 
-	// Bind les �v�nements AVANT la connexion pour ne rien manquer
-	LobbyBeaconClient->OnLobbyUpdated.AddDynamic(this, &UOnlineSessionSubsystem::HandleLobbyUpdated_Internal);
-
-	const FOnlineSessionSearchResult& TempResult = SearchResults[SessionInfo.SessionSearchResultIndex];
-
-	LobbyBeaconClient->OnRequestValidate.BindLambda(
-		[this, TempResult](bool bValidated)
-		{
-			bBeaconConnecting = false;
-			if (bValidated)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: beacon valide."));
-				// Notifie l'UI que le beacon est pr�t
-				OnBeaconClientCreated.Broadcast(LobbyBeaconClient);
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: validation beacon echouee."));
-				CleanupBeaconClient();
-				OnSessionJoinCompleted.Broadcast(false);
-			}
-		}
-	);
-
-	// R�solution de l'adresse IP de l'h�te depuis l'OSS.
-	// GetResolvedConnectString retourne quelque chose comme "192.168.1.10:7777".
-	// On extrait l'IP et on remplace le port par celui du beacon.
-	FString HostIP = TEXT("127.0.0.1"); // fallback PIE/LAN local
-	{
-		FString ConnectString;
-		if (Session->GetResolvedConnectString(TempResult, NAME_GameSession, ConnectString))
-		{
-			// ConnectString format : "IP:Port" � on garde seulement l'IP
-			FString Port;
-			if (ConnectString.Split(TEXT(":"), &HostIP, &Port))
-			{
-				UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: IP hote resolue = %s"), *HostIP);
-			}
-			else
-			{
-				// Pas de ":" -> ConnectString est d�j� une IP pure
-				HostIP = ConnectString;
-			}
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: GetResolvedConnectString echoue, fallback 127.0.0.1"));
-		}
-	}
-
-	FURL Destination(nullptr, *HostIP, TRAVEL_Absolute);
-	Destination.Port = LobbyConstants::BeaconPort;
-	UE_LOG(LogTemp, Warning, TEXT("CustomJoinSession: connexion beacon a %s:%d"), *Destination.Host, Destination.Port);
-
-	bBeaconConnecting = true;
-	LobbyBeaconClient->ConnectToServer(Destination);
+	ConnectAsBeaconClient(HostIP, ClientInfo);
 }
 
 // ============================================================
-//  Beacon host (c�t� serveur)
+//  Lancer la partie (hôte uniquement)
+// ============================================================
+
+void UOnlineSessionSubsystem::StartGame()
+{
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC)
+	{
+		UE_LOG(LogTemp, Error, TEXT("StartGame: pas de PlayerController."));
+		return;
+	}
+
+	// ServerTravel : emmène tous les clients connectés sur la map de jeu.
+	// ?listen est requis pour que le serveur continue d'accepter les connexions.
+	const FString TravelURL = LobbyConstants::GameMapPath + TEXT("?listen");
+	UE_LOG(LogTemp, Warning, TEXT("StartGame: ServerTravel vers %s"), *TravelURL);
+
+	GetWorld()->ServerTravel(TravelURL);
+}
+
+// ============================================================
+//  Quitter le lobby (client)
+// ============================================================
+
+void UOnlineSessionSubsystem::LeaveBeaconLobby()
+{
+	UE_LOG(LogTemp, Warning, TEXT("LeaveBeaconLobby: deconnexion du lobby."));
+
+	// TODO : envoyer un RPC au host pour libérer le slot avant de détruire le client.
+	// Pour l'instant on détruit directement — le host détectera la déconnexion
+	// via OnClientDisconnected dans LobbyBeaconHostObject.
+	CleanupBeaconClient();
+}
+
+// ============================================================
+//  Destroy session (hôte)
+// ============================================================
+
+void UOnlineSessionSubsystem::DestroySession()
+{
+	if (!Session.IsValid())
+		return;
+
+	// Nettoie le beacon client de l'hôte
+	CleanupBeaconClient();
+
+	// Détruit le beacon host -> déconnecte tous les clients
+	if (BeaconHost)
+	{
+		BeaconHost->Destroy();
+		BeaconHost = nullptr;
+	}
+
+	DestroyHandle = Session->AddOnDestroySessionCompleteDelegate_Handle(
+		FOnDestroySessionCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnDestroySessionCompleted));
+
+	if (!Session->DestroySession(NAME_GameSession))
+		Session->ClearOnDestroySessionCompleteDelegate_Handle(DestroyHandle);
+
+	bIsHost = false;
+}
+
+void UOnlineSessionSubsystem::OnDestroySessionCompleted(FName SessionName, bool Successful)
+{
+	if (Session) Session->ClearOnDestroySessionCompleteDelegate_Handle(DestroyHandle);
+	UE_LOG(LogTemp, Warning, TEXT("OnDestroySessionCompleted: %s"), Successful ? TEXT("succes") : TEXT("echec"));
+}
+
+void UOnlineSessionSubsystem::OnUpdateSessionCompleted(FName SessionName, bool Successful)
+{
+	if (Session) Session->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateHandle);
+}
+
+// ============================================================
+//  Beacon Host (côté hôte)
 // ============================================================
 
 void UOnlineSessionSubsystem::CreateHostBeacon()
 {
-	// Idempotent : ne respawne pas si d�j� actif
 	if (BeaconHost)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CreateHostBeacon: beacon host deja actif, ignore."));
+		UE_LOG(LogTemp, Warning, TEXT("CreateHostBeacon: beacon host deja actif."));
 		return;
 	}
 
@@ -337,152 +300,90 @@ void UOnlineSessionSubsystem::CreateHostBeacon()
 		return;
 	}
 
-	// ReservedSlots d�marre � 0 : le slot de l'h�te sera accord� via le handshake
-	// beacon (Server_RequestReservation), identique � n'importe quel client.
 	HostObject->ReservedSlots = 0;
 	HostObject->MaxSlots = MaxPlayers;
 
 	int32 UnitCount = 1;
 	if (LastSessionSettings.IsValid())
-	{
 		LastSessionSettings->Get(LobbyConstants::Key_UnitCount, UnitCount);
-	}
 	HostObject->RoomUnitCount = UnitCount;
 
 	BeaconHost->RegisterHost(HostObject);
+	UE_LOG(LogTemp, Warning, TEXT("CreateHostBeacon: actif sur le port %d."), BeaconHost->ListenPort);
 
-	UE_LOG(LogTemp, Warning, TEXT("CreateHostBeacon: host actif sur le port %d."), BeaconHost->ListenPort);
-
-	// L'h�te se connecte � son propre beacon en tant que client pour envoyer
-	// ses FPlayerLobbyInfo et appara�tre dans la liste du lobby.
-	ConnectHostAsClient(PendingHostPlayerInfo);
+	// L'hôte se connecte à son propre beacon (127.0.0.1 est correct ici car c'est local)
+	ConnectAsBeaconClient(TEXT("127.0.0.1"), PendingHostPlayerInfo);
 }
 
 // ============================================================
-//  Connexion de l'h�te � son propre beacon (listen-server)
+//  Connexion beacon client (hôte ET clients partagent ce chemin)
 // ============================================================
 
-void UOnlineSessionSubsystem::ConnectHostAsClient(const FPlayerLobbyInfo& HostInfo)
+void UOnlineSessionSubsystem::ConnectAsBeaconClient(const FString& HostIP, const FPlayerLobbyInfo& PlayerInfo)
 {
 	if (bBeaconConnecting)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ConnectHostAsClient: connexion deja en cours, ignore."));
+		UE_LOG(LogTemp, Warning, TEXT("ConnectAsBeaconClient: connexion deja en cours."));
 		return;
 	}
 
-	// On nettoie un �ventuel client r�siduel avant de recr�er
 	CleanupBeaconClient();
 
 	LobbyBeaconClient = GetWorld()->SpawnActor<ALobbyBeaconClient>();
 	if (!LobbyBeaconClient)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ConnectHostAsClient: impossible de spawner ALobbyBeaconClient."));
+		UE_LOG(LogTemp, Error, TEXT("ConnectAsBeaconClient: impossible de spawner ALobbyBeaconClient."));
+		OnSessionJoinCompleted.Broadcast(false);
 		return;
 	}
 
 	LobbyBeaconClient->SetActorHiddenInGame(true);
 	LobbyBeaconClient->SetActorEnableCollision(false);
 	LobbyBeaconClient->SetReplicates(true);
+	LobbyBeaconClient->PendingPlayerInfo = PlayerInfo;
 
-	// Bind les �v�nements AVANT la connexion
 	LobbyBeaconClient->OnLobbyUpdated.AddDynamic(this, &UOnlineSessionSubsystem::HandleLobbyUpdated_Internal);
 
-	// Capture HostInfo par valeur pour l'utiliser dans le lambda
 	LobbyBeaconClient->OnRequestValidate.BindLambda(
-		[this, HostInfo](bool bValidated)
+		[this](bool bValidated)
 		{
 			bBeaconConnecting = false;
 			if (bValidated)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ConnectHostAsClient: hote enregistre dans le lobby."));
+				UE_LOG(LogTemp, Warning, TEXT("ConnectAsBeaconClient: connexion validee."));
 				OnBeaconClientCreated.Broadcast(LobbyBeaconClient);
+				OnSessionJoinCompleted.Broadcast(true);
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("ConnectHostAsClient: validation echouee pour l'hote."));
+				UE_LOG(LogTemp, Error, TEXT("ConnectAsBeaconClient: validation echouee."));
 				CleanupBeaconClient();
+				OnSessionJoinCompleted.Broadcast(false);
 			}
 		}
 	);
 
-	// On surcharge ici le PlayerInfo qui sera envoy� par Client_ReservationAccepted_Implementation.
-	// On stocke les infos h�te dans le client beacon pour qu'il les utilise � la place des valeurs par d�faut.
-	LobbyBeaconClient->PendingPlayerInfo = HostInfo;
-
-	// Connexion locale (l'h�te se connecte � son propre beacon)
-	FURL Destination(nullptr, TEXT("127.0.0.1"), TRAVEL_Absolute);
+	FURL Destination(nullptr, *HostIP, TRAVEL_Absolute);
 	Destination.Port = LobbyConstants::BeaconPort;
-	UE_LOG(LogTemp, Warning, TEXT("ConnectHostAsClient: connexion locale a %s:%d"), *Destination.Host, Destination.Port);
+	UE_LOG(LogTemp, Warning, TEXT("ConnectAsBeaconClient: connexion vers %s:%d"), *HostIP, Destination.Port);
 
 	bBeaconConnecting = true;
 	LobbyBeaconClient->ConnectToServer(Destination);
 }
 
 // ============================================================
-//  Destroy session
+//  Nettoyage beacon client
 // ============================================================
 
-void UOnlineSessionSubsystem::DestroySession()
+void UOnlineSessionSubsystem::CleanupBeaconClient()
 {
-	if (!Session.IsValid())
-		return;
-
-	// On nettoie aussi le beacon host
-	if (BeaconHost)
+	if (LobbyBeaconClient)
 	{
-		BeaconHost->Destroy();
-		BeaconHost = nullptr;
+		LobbyBeaconClient->OnLobbyUpdated.RemoveDynamic(this, &UOnlineSessionSubsystem::HandleLobbyUpdated_Internal);
+		LobbyBeaconClient->DestroyBeacon();
+		LobbyBeaconClient = nullptr;
 	}
-
-	DestroyHandle = Session->AddOnDestroySessionCompleteDelegate_Handle(
-		FOnDestroySessionCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnDestroySessionCompleted)
-	);
-
-	if (!Session->DestroySession(NAME_GameSession))
-	{
-		Session->ClearOnDestroySessionCompleteDelegate_Handle(DestroyHandle);
-	}
-}
-
-void UOnlineSessionSubsystem::OnDestroySessionCompleted(FName SessionName, bool Successful)
-{
-	if (Session)
-		Session->ClearOnDestroySessionCompleteDelegate_Handle(DestroyHandle);
-
-	UE_LOG(LogTemp, Warning, TEXT("OnDestroySessionCompleted: %s"), Successful ? TEXT("succes") : TEXT("echec"));
-}
-
-// ============================================================
-//  Update de setting custom
-// ============================================================
-
-template<typename ValueType>
-void UOnlineSessionSubsystem::UpdateCustomSetting(const FName& KeyName, const ValueType& Value,
-	EOnlineDataAdvertisementType::Type InType)
-{
-	if (!Session.IsValid() || !LastSessionSettings.IsValid())
-		return;
-
-	TSharedPtr<FOnlineSessionSettings> UpdatedSettings = MakeShareable(new FOnlineSessionSettings(*LastSessionSettings));
-	UpdatedSettings->Set(KeyName, Value, InType);
-
-	UpdateHandle = Session->AddOnUpdateSessionCompleteDelegate_Handle(
-		FOnUpdateSessionCompleteDelegate::CreateUObject(this, &UOnlineSessionSubsystem::OnUpdateSessionCompleted)
-	);
-
-	if (!Session->UpdateSession(NAME_GameSession, *UpdatedSettings))
-	{
-		Session->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateHandle);
-		return;
-	}
-
-	LastSessionSettings = UpdatedSettings;
-}
-
-void UOnlineSessionSubsystem::OnUpdateSessionCompleted(FName SessionName, bool Successful)
-{
-	if (Session)
-		Session->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateHandle);
+	bBeaconConnecting = false;
 }
 
 // ============================================================
