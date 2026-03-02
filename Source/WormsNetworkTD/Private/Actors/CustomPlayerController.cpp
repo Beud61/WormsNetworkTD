@@ -29,7 +29,7 @@ void ACustomPlayerController::BeginPlay()
 		UWormsGameInstance* GI = Cast<UWormsGameInstance>(GetGameInstance());
 		if (!GI || !GI->bGameStarted)
 		{
-			ShowMainMenu();
+			//ShowMainMenu();//Remove for build game
 		}
 	}
 }

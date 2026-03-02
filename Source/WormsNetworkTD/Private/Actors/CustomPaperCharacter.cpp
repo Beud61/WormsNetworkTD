@@ -27,6 +27,7 @@ ACustomPaperCharacter::ACustomPaperCharacter()
 	GetCharacterMovement()->AirControl = 0.8f;
 	GetCharacterMovement()->MaxWalkSpeed = 600.f;
 	GetCharacterMovement()->BrakingFrictionFactor = 2.f;
+	GetCharacterMovement()->SetWalkableFloorAngle(65.f);
 
 	/* ================= CAMERA ================= */
 

@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Engine/TextureRenderTarget2D.h"
-#include "ProceduralMeshComponent.h"
+#include "Components/BoxComponent.h"
 #include "DrawDebugHelpers.h"
 #include "DestructibleMap.generated.h"
 
@@ -38,15 +38,21 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Map")
     FVector2D MapWorldSize = FVector2D(4096.f, 1024.f);
 
-    // 1 point tous les N pixels. 8 = bon compromis, 16 = leger
+    // 1 box tous les N pixels en X.
+    // 4 = tres precis, 8 = bon compromis, 16 = leger
     UPROPERTY(EditAnywhere, Category = "Map|Collision")
     int32 ContourStep = 8;
 
-    // Epaisseur du mesh de collision en Y (doit etre > demi-capsule du perso)
+    // Epaisseur des boxes en Y.
+    // Doit largement depasser la capsule du perso des deux cotes.
+    // Si le perso spawne a Y=0 et le BP_Map est a Y=0, 500 suffit.
     UPROPERTY(EditAnywhere, Category = "Map|Collision")
-    float CollisionThickness = 200.f;
+    float BoxHalfDepthY = 500.f;
 
-    // Debug visuel au BeginPlay
+    // Demi-hauteur de chaque box (fine = collision precise sur la surface)
+    UPROPERTY(EditAnywhere, Category = "Map|Collision")
+    float BoxHalfHeight = 12.f;
+
     UPROPERTY(EditAnywhere, Category = "Map|Debug")
     bool bShowDebugCollision = false;
 
@@ -55,9 +61,6 @@ protected:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     TObjectPtr<UStaticMeshComponent> MapMesh;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    TObjectPtr<UProceduralMeshComponent> CollisionMesh;
 
 private:
     UPROPERTY()
@@ -71,15 +74,17 @@ private:
 
     TArray<bool> SolidPixels;
 
+    // Tableau des boxes de surface (une par segment de terrain)
+    UPROPERTY()
+    TArray<TObjectPtr<UBoxComponent>> SurfaceBoxes;
+
     void InitRenderTarget();
     void BuildSolidPixels();
-    void RebuildCollisionMesh();
+    void RebuildSurfaceBoxes();
 
-    // Retourne la hauteur world Z de la surface a un X world donne
-    float GetSurfaceWorldZ(float WorldX) const;
-
-    int32 GetSurfacePixelY(int32 PixelX) const;
-    void ConvertWorldToPixel(FVector2D WorldPos, int32& OutPX, int32& OutPY) const;
+    UBoxComponent* CreateSurfaceBox(FVector2D SurfA, FVector2D SurfB);
+    int32     GetSurfacePixelY(int32 PixelX) const;
     FVector2D PixelToWorld(float PX, float PY) const;
-    void ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const;
+    void      ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const;
+    void      ConvertWorldToPixel(FVector2D WorldPos, int32& OutPX, int32& OutPY) const;
 };
