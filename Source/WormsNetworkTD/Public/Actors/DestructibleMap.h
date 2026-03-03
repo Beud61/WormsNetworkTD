@@ -38,18 +38,15 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Map")
     FVector2D MapWorldSize = FVector2D(4096.f, 1024.f);
 
-    // 1 box tous les N pixels en X.
-    // 4 = tres precis, 8 = bon compromis, 16 = leger
+    // 1 box tous les N pixels. 4 = precis, 8 = bon compromis
     UPROPERTY(EditAnywhere, Category = "Map|Collision")
     int32 ContourStep = 8;
 
-    // Epaisseur des boxes en Y.
-    // Doit largement depasser la capsule du perso des deux cotes.
-    // Si le perso spawne a Y=0 et le BP_Map est a Y=0, 500 suffit.
+    // Profondeur des boxes en Y (doit couvrir la capsule du perso)
     UPROPERTY(EditAnywhere, Category = "Map|Collision")
     float BoxHalfDepthY = 500.f;
 
-    // Demi-hauteur de chaque box (fine = collision precise sur la surface)
+    // Demi-epaisseur verticale de chaque box de sol (fine = precis)
     UPROPERTY(EditAnywhere, Category = "Map|Collision")
     float BoxHalfHeight = 12.f;
 
@@ -74,16 +71,16 @@ private:
 
     TArray<bool> SolidPixels;
 
-    // Tableau des boxes de surface (une par segment de terrain)
     UPROPERTY()
     TArray<TObjectPtr<UBoxComponent>> SurfaceBoxes;
 
     void InitRenderTarget();
     void BuildSolidPixels();
     void RebuildSurfaceBoxes();
+    void RebuildZone(int32 PixelXMin, int32 PixelXMax);
+    void SpawnBoxesForColumn(int32 PX);
+    void SpawnBoxesForRow(int32 PY);
 
-    UBoxComponent* CreateSurfaceBox(FVector2D SurfA, FVector2D SurfB);
-    int32     GetSurfacePixelY(int32 PixelX) const;
     FVector2D PixelToWorld(float PX, float PY) const;
     void      ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const;
     void      ConvertWorldToPixel(FVector2D WorldPos, int32& OutPX, int32& OutPY) const;

@@ -7,9 +7,6 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/TextureRenderTarget2D.h"
 
-// ============================================================
-//  Constructeur
-// ============================================================
 ADestructibleMap::ADestructibleMap()
 {
     PrimaryActorTick.bCanEverTick = false;
@@ -19,18 +16,13 @@ ADestructibleMap::ADestructibleMap()
     MapMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
-// ============================================================
-//  BeginPlay
-// ============================================================
 void ADestructibleMap::BeginPlay()
 {
     Super::BeginPlay();
     InitRenderTarget();
     BuildSolidPixels();
     RebuildSurfaceBoxes();
-
-    if (bShowDebugCollision)
-        DrawDebugCollision();
+    if (bShowDebugCollision) DrawDebugCollision();
 }
 
 // ============================================================
@@ -38,19 +30,13 @@ void ADestructibleMap::BeginPlay()
 // ============================================================
 void ADestructibleMap::InitRenderTarget()
 {
-    if (!MapTexture)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: MapTexture non assignee !"));
-        return;
-    }
+    if (!MapTexture) { UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: MapTexture manquante")); return; }
 
     RTWidth = MapTexture->GetSizeX();
     RTHeight = MapTexture->GetSizeY();
 
-    DestructionMask = UKismetRenderingLibrary::CreateRenderTarget2D(
-        GetWorld(), RTWidth, RTHeight, RTF_RGBA8);
+    DestructionMask = UKismetRenderingLibrary::CreateRenderTarget2D(GetWorld(), RTWidth, RTHeight, RTF_RGBA8);
     if (!DestructionMask) return;
-
     UKismetRenderingLibrary::ClearRenderTarget2D(GetWorld(), DestructionMask, FLinearColor::White);
 
     if (MapMaterial)
@@ -61,9 +47,8 @@ void ADestructibleMap::InitRenderTarget()
         MapMesh->SetMaterial(0, MapMatInstance);
     }
 
-    FVector Scale(MapWorldSize.X / 100.f, MapWorldSize.Y / 100.f, 1.f);
-    MapMesh->SetRelativeScale3D(Scale);
-
+    MapMesh->SetRelativeScale3D(FVector(MapWorldSize.X / 100.f, MapWorldSize.Y / 100.f, 1.f));
+    //MapMesh->SetRelativeRotation(FRotator(90.f, 0.f, 0.f));
     UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Init OK %dx%d"), RTWidth, RTHeight);
 }
 
@@ -75,8 +60,7 @@ void ADestructibleMap::BuildSolidPixels()
     if (!MapTexture) return;
 
     FTexture2DMipMap& Mip = MapTexture->GetPlatformData()->Mips[0];
-    if (!Mip.BulkData.IsBulkDataLoaded())
-        Mip.BulkData.LoadBulkDataWithFileReader();
+    if (!Mip.BulkData.IsBulkDataLoaded()) Mip.BulkData.LoadBulkDataWithFileReader();
 
     void* Data = Mip.BulkData.Lock(LOCK_READ_ONLY);
     if (Data)
@@ -86,15 +70,14 @@ void ADestructibleMap::BuildSolidPixels()
         for (int32 i = 0; i < RTWidth * RTHeight; i++)
             SolidPixels[i] = Px[i * 4 + 3] > 10;
         Mip.BulkData.Unlock();
-        UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: %d pixels lus (BulkData)"), RTWidth * RTHeight);
+        UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: pixels lus OK (%dx%d)"), RTWidth, RTHeight);
         return;
     }
     Mip.BulkData.Unlock();
 
-    // Fallback via Render Target temporaire
+    // Fallback
     UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: fallback RT..."));
-    UTextureRenderTarget2D* TempRT = UKismetRenderingLibrary::CreateRenderTarget2D(
-        GetWorld(), RTWidth, RTHeight, RTF_RGBA8);
+    UTextureRenderTarget2D* TempRT = UKismetRenderingLibrary::CreateRenderTarget2D(GetWorld(), RTWidth, RTHeight, RTF_RGBA8);
     UCanvas* C; FVector2D CS; FDrawToRenderTargetContext Ctx;
     UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(GetWorld(), TempRT, C, CS, Ctx);
     if (C) C->K2_DrawTexture(MapTexture, FVector2D(0, 0), FVector2D(RTWidth, RTHeight), FVector2D(0, 0));
@@ -102,52 +85,36 @@ void ADestructibleMap::BuildSolidPixels()
     FRenderTarget* RT = TempRT->GameThread_GetRenderTargetResource();
     if (RT)
     {
-        TArray<FColor> Tmp;
-        RT->ReadPixels(Tmp);
+        TArray<FColor> Tmp; RT->ReadPixels(Tmp);
         SolidPixels.SetNum(Tmp.Num());
-        for (int32 i = 0; i < Tmp.Num(); i++)
-            SolidPixels[i] = Tmp[i].A > 10;
+        for (int32 i = 0; i < Tmp.Num(); i++) SolidPixels[i] = Tmp[i].A > 10;
         UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: fallback OK"));
     }
     TempRT->ConditionalBeginDestroy();
 }
 
 // ============================================================
-//  GetSurfacePixelY
-//  Premier pixel solide depuis le haut dans la colonne PX
-// ============================================================
-int32 ADestructibleMap::GetSurfacePixelY(int32 PixelX) const
-{
-    PixelX = FMath::Clamp(PixelX, 0, RTWidth - 1);
-    for (int32 PY = 0; PY < RTHeight; PY++)
-        if (SolidPixels[PY * RTWidth + PixelX]) return PY;
-    return RTHeight;
-}
-
-// ============================================================
-//  PixelToWorld
+//  Coordonnees
 // ============================================================
 FVector2D ADestructibleMap::PixelToWorld(float PX, float PY) const
 {
     const FVector Loc = GetActorLocation();
-    float WX = (Loc.X - MapWorldSize.X * 0.5f) + (PX / RTWidth) * MapWorldSize.X;
-    float WZ = (Loc.Z + MapWorldSize.Y * 0.5f) - (PY / RTHeight) * MapWorldSize.Y;
-    return FVector2D(WX, WZ);
+    return FVector2D(
+        (Loc.X - MapWorldSize.X * 0.5f) + (PX / RTWidth) * MapWorldSize.X,
+        (Loc.Z + MapWorldSize.Y * 0.5f) - (PY / RTHeight) * MapWorldSize.Y
+    );
 }
 
 void ADestructibleMap::ConvertWorldToUV(FVector2D WorldPos, float& U, float& V) const
 {
     const FVector Loc = GetActorLocation();
-    U = (WorldPos.X - (Loc.X - MapWorldSize.X * 0.5f)) / MapWorldSize.X;
-    V = 1.f - (WorldPos.Y - (Loc.Z - MapWorldSize.Y * 0.5f)) / MapWorldSize.Y;
-    U = FMath::Clamp(U, 0.f, 1.f);
-    V = FMath::Clamp(V, 0.f, 1.f);
+    U = FMath::Clamp((WorldPos.X - (Loc.X - MapWorldSize.X * 0.5f)) / MapWorldSize.X, 0.f, 1.f);
+    V = FMath::Clamp(1.f - (WorldPos.Y - (Loc.Z - MapWorldSize.Y * 0.5f)) / MapWorldSize.Y, 0.f, 1.f);
 }
 
 void ADestructibleMap::ConvertWorldToPixel(FVector2D WorldPos, int32& OutPX, int32& OutPY) const
 {
-    float U, V;
-    ConvertWorldToUV(WorldPos, U, V);
+    float U, V; ConvertWorldToUV(WorldPos, U, V);
     OutPX = FMath::Clamp((int32)(U * RTWidth), 0, RTWidth - 1);
     OutPY = FMath::Clamp((int32)(V * RTHeight), 0, RTHeight - 1);
 }
@@ -155,128 +122,221 @@ void ADestructibleMap::ConvertWorldToPixel(FVector2D WorldPos, int32& OutPX, int
 bool ADestructibleMap::IsSolid(FVector2D WorldPosition) const
 {
     if (SolidPixels.IsEmpty()) return false;
-    int32 PX, PY;
-    ConvertWorldToPixel(WorldPosition, PX, PY);
+    int32 PX, PY; ConvertWorldToPixel(WorldPosition, PX, PY);
     return SolidPixels[PY * RTWidth + PX];
 }
 
 // ============================================================
-//  CreateSurfaceBox
-//  Cree une BoxComponent fine et inclinee entre deux points
-//  de surface — identique aux boxes jaunes de la demo JS.
+//  SpawnBoxesForColumn
 //
-//  Vue de cote :
+//  Parcourt UNE colonne de pixels et cree une box plate
+//  a chaque transition vide->solide (= chaque surface).
 //
-//  A (surf) ---- B (surf)
-//       \       /
-//        [  box  ]   <- inclinee selon la pente A->B
+//  La box est :
+//    - Centree en X sur la colonne
+//    - Centree en Y sur l'acteur (couvre la capsule du perso)
+//    - Fine en Z (BoxHalfHeight)
+//    - Large en X (ContourStep pixels converti en units world)
 //
-//  Vue de face (axe X) :
-//        |<-- BoxHalfDepthY * 2 -->|
-//        |_________________________|
-//        Y = ActorY - Depth ... Y = ActorY + Depth
+//  Pas de pairing, pas d'inclinaison artificielle.
+//  Chaque box est independante et plate.
 // ============================================================
-UBoxComponent* ADestructibleMap::CreateSurfaceBox(FVector2D SurfA, FVector2D SurfB)
+void ADestructibleMap::SpawnBoxesForColumn(int32 PX)
 {
+    if (SolidPixels.IsEmpty()) return;
+    PX = FMath::Clamp(PX, 0, RTWidth - 1);
+
     const FVector Loc = GetActorLocation();
+    const float   HalfY = BoxHalfDepthY;
 
-    // Centre de la box entre les deux points de surface
-    float CenterX = (SurfA.X + SurfB.X) * 0.5f;
-    float CenterZ = (SurfA.Y + SurfB.Y) * 0.5f;
-    float HalfX = FMath::Abs(SurfB.X - SurfA.X) * 0.5f;
+    // Largeur world d'une colonne de ContourStep pixels
+    float WorldLeft = PixelToWorld((float)PX, 0.f).X;
+    float WorldRight = PixelToWorld((float)(PX + ContourStep), 0.f).X;
+    float CenterX = (WorldLeft + WorldRight) * 0.5f;
+    float HalfX = FMath::Abs(WorldRight - WorldLeft) * 0.5f;
+    if (HalfX < 0.1f) return;
 
-    if (HalfX < 0.1f) return nullptr;
+    // Helper : cree une box a la position donnee
+    auto SpawnBox = [&](float WorldZ, float ExtX, float ExtZ, float RotRoll)
+        {
+            UBoxComponent* Box = NewObject<UBoxComponent>(this);
+            Box->RegisterComponent();
+            Box->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
+            Box->SetWorldLocation(FVector(CenterX, Loc.Y, WorldZ));
+            Box->SetWorldRotation(FRotator(0.f, 0.f, RotRoll));
+            Box->SetBoxExtent(FVector(ExtX, HalfY, ExtZ));
+            Box->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+            Box->SetCollisionObjectType(ECC_WorldStatic);
+            Box->SetCollisionResponseToAllChannels(ECR_Block);
+            Box->SetVisibility(false);
+            SurfaceBoxes.Add(Box);
+        };
 
-    // Calcul de l'angle de la pente (en degres dans le plan XZ)
-    float DeltaX = SurfB.X - SurfA.X;
-    float DeltaZ = SurfB.Y - SurfA.Y;
-    float AngleDeg = FMath::RadiansToDegrees(FMath::Atan2(DeltaZ, DeltaX));
+    bool bPrevSolid = false;
+    int32 SolidStartPY = 0; // PY ou la zone solide a commence
 
-    UBoxComponent* Box = NewObject<UBoxComponent>(this);
-    Box->RegisterComponent();
-    Box->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
+    for (int32 PY = 0; PY < RTHeight; PY++)
+    {
+        bool bSolid = SolidPixels[PY * RTWidth + PX];
 
-    // Position : centree en Y sur l'acteur (meme Y que le perso doit spawner)
-    Box->SetWorldLocation(FVector(CenterX, Loc.Y, CenterZ));
+        if (bSolid && !bPrevSolid)
+        {
+            // Transition VIDE->SOLIDE : surface du dessus (sol)
+            // On place une box plate horizontale
+            SolidStartPY = PY;
+            FVector2D SurfWorld = PixelToWorld((float)PX, (float)PY);
+            SpawnBox(SurfWorld.Y, HalfX, BoxHalfHeight, 0.f);
+        }
+        else if (!bSolid && bPrevSolid)
+        {
+            // Transition SOLIDE->VIDE : paroi laterale (bord bas du terrain)
+            // On place une box murale verticale sur le cote du trou
+            // Hauteur de la paroi = epaisseur de la zone solide qu'on vient de quitter
+            int32 WallHeightPx = PY - SolidStartPY;
+            float WallHalfZ = FMath::Max(
+                (float)WallHeightPx / RTHeight * MapWorldSize.Y * 0.5f,
+                BoxHalfHeight
+            );
+            FVector2D MidWorld = PixelToWorld((float)PX, (float)(SolidStartPY + WallHeightPx / 2));
+            SpawnBox(MidWorld.Y, HalfX, WallHalfZ, 0.f);
+        }
 
-    // Rotation : inclinee selon la pente du terrain (Roll dans le plan XZ)
-    // On utilise Roll car le mesh 2D est dans le plan XZ
-    Box->SetWorldRotation(FRotator(0.f, 0.f, -AngleDeg));
-
-    // Extent : large en X (couvre le segment), profond en Y (couvre la capsule), fin en Z
-    Box->SetBoxExtent(FVector(HalfX, BoxHalfDepthY, BoxHalfHeight));
-
-    Box->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-    Box->SetCollisionObjectType(ECC_WorldStatic);
-    Box->SetCollisionResponseToAllChannels(ECR_Block);
-    Box->SetVisibility(false);
-
-    return Box;
+        bPrevSolid = bSolid;
+    }
 }
 
 // ============================================================
-//  RebuildSurfaceBoxes
-//  Detruit toutes les boxes et les recrée depuis SolidPixels.
-//  Appele au BeginPlay et apres chaque explosion complete.
+//  SpawnBoxesForRow
+//  Scanne UNE ligne de pixels et place une box murale
+//  a chaque transition vide->solide (mur gauche)
+//  et solide->vide (mur droit).
+// ============================================================
+void ADestructibleMap::SpawnBoxesForRow(int32 PY)
+{
+    if (SolidPixels.IsEmpty()) return;
+    PY = FMath::Clamp(PY, 0, RTHeight - 1);
+
+    const FVector Loc = GetActorLocation();
+    const float   HalfY = BoxHalfDepthY;
+
+    // Hauteur world de cette ligne
+    float WorldTop = PixelToWorld(0.f, (float)PY).Y;
+    float WorldBottom = PixelToWorld(0.f, (float)(PY + ContourStep)).Y;
+    float CenterZ = (WorldTop + WorldBottom) * 0.5f;
+    float HalfZ = FMath::Abs(WorldTop - WorldBottom) * 0.5f;
+    if (HalfZ < 0.1f) return;
+
+    bool bPrevSolid = false;
+    for (int32 PX = 0; PX < RTWidth; PX++)
+    {
+        bool bSolid = SolidPixels[PY * RTWidth + PX];
+
+        if (bSolid && !bPrevSolid)
+        {
+            // Transition vide->solide : mur gauche
+            FVector2D WallWorld = PixelToWorld((float)PX, (float)PY);
+            UBoxComponent* Box = NewObject<UBoxComponent>(this);
+            Box->RegisterComponent();
+            Box->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
+            Box->SetWorldLocation(FVector(WallWorld.X, Loc.Y, CenterZ));
+            Box->SetWorldRotation(FRotator::ZeroRotator);
+            Box->SetBoxExtent(FVector(BoxHalfHeight, HalfY, HalfZ));
+            Box->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+            Box->SetCollisionObjectType(ECC_WorldStatic);
+            Box->SetCollisionResponseToAllChannels(ECR_Block);
+            Box->SetVisibility(false);
+            SurfaceBoxes.Add(Box);
+        }
+        else if (!bSolid && bPrevSolid)
+        {
+            // Transition solide->vide : mur droit
+            FVector2D WallWorld = PixelToWorld((float)(PX - 1), (float)PY);
+            UBoxComponent* Box = NewObject<UBoxComponent>(this);
+            Box->RegisterComponent();
+            Box->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
+            Box->SetWorldLocation(FVector(WallWorld.X, Loc.Y, CenterZ));
+            Box->SetWorldRotation(FRotator::ZeroRotator);
+            Box->SetBoxExtent(FVector(BoxHalfHeight, HalfY, HalfZ));
+            Box->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+            Box->SetCollisionObjectType(ECC_WorldStatic);
+            Box->SetCollisionResponseToAllChannels(ECR_Block);
+            Box->SetVisibility(false);
+            SurfaceBoxes.Add(Box);
+        }
+
+        bPrevSolid = bSolid;
+    }
+}
+
+// ============================================================
+//  RebuildSurfaceBoxes — reconstruit toutes les boxes
 // ============================================================
 void ADestructibleMap::RebuildSurfaceBoxes()
 {
-    // Detruit les anciennes boxes
     for (UBoxComponent* Box : SurfaceBoxes)
         if (Box) Box->DestroyComponent();
     SurfaceBoxes.Empty();
 
     if (SolidPixels.IsEmpty()) return;
 
+    // Scan par colonnes : surfaces haut/bas
     for (int32 PX = 0; PX < RTWidth - ContourStep; PX += ContourStep)
+        SpawnBoxesForColumn(PX);
+
+    // Scan par lignes : parois gauche/droite
+    for (int32 PY = 0; PY < RTHeight - ContourStep; PY += ContourStep)
+        SpawnBoxesForRow(PY);
+
+    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: %d boxes creees"), SurfaceBoxes.Num());
+}
+
+// ============================================================
+//  RebuildZone — reconstruit uniquement une zone en pixel X
+// ============================================================
+void ADestructibleMap::RebuildZone(int32 PixelXMin, int32 PixelXMax)
+{
+    // Supprime les boxes dans la zone
+    FVector2D ZoneWorldLeft = PixelToWorld((float)PixelXMin, 0.f);
+    FVector2D ZoneWorldRight = PixelToWorld((float)PixelXMax, 0.f);
+
+    for (int32 i = SurfaceBoxes.Num() - 1; i >= 0; i--)
     {
-        int32 SYA = GetSurfacePixelY(PX);
-        int32 SYB = GetSurfacePixelY(PX + ContourStep);
-
-        // Colonne completement vide : pas de box
-        if (SYA >= RTHeight && SYB >= RTHeight) continue;
-
-        FVector2D SurfA = PixelToWorld((float)PX, (float)SYA);
-        FVector2D SurfB = PixelToWorld((float)(PX + ContourStep), (float)SYB);
-
-        UBoxComponent* Box = CreateSurfaceBox(SurfA, SurfB);
-        if (Box) SurfaceBoxes.Add(Box);
+        UBoxComponent* Box = SurfaceBoxes[i];
+        if (!Box) continue;
+        float BX = Box->GetComponentLocation().X;
+        if (BX >= ZoneWorldLeft.X - 50.f && BX <= ZoneWorldRight.X + 50.f)
+        {
+            Box->DestroyComponent();
+            SurfaceBoxes.RemoveAt(i);
+        }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: %d boxes de surface creees"), SurfaceBoxes.Num());
+    // Recrée les boxes dans la zone — colonnes ET lignes
+    int32 PXMin = (PixelXMin / ContourStep) * ContourStep;
+    int32 PXMax = FMath::Min(((PixelXMax / ContourStep) + 1) * ContourStep, RTWidth - ContourStep);
+
+    // Colonnes : surfaces haut/bas
+    for (int32 PX = PXMin; PX < PXMax; PX += ContourStep)
+        SpawnBoxesForColumn(PX);
+
+    // Lignes : parois gauche/droite dans la zone affectee
+    // On trouve les PY min/max en pixel correspondant a la zone world
+    for (int32 PY = 0; PY < RTHeight - ContourStep; PY += ContourStep)
+        SpawnBoxesForRow(PY);
 }
 
 // ============================================================
 //  DrawDebugCollision
-//  Ligne verte = contour de surface
-//  Boites jaunes = boxes de collision avec leur inclinaison
 // ============================================================
 void ADestructibleMap::DrawDebugCollision()
 {
-    if (SolidPixels.IsEmpty()) return;
-
     const UWorld* World = GetWorld();
     const float   Y = GetActorLocation().Y;
 
-    // Ligne de surface verte + points rouges
-    FVector2D Prev = PixelToWorld(0.f, (float)GetSurfacePixelY(0));
-    for (int32 PX = ContourStep; PX < RTWidth; PX += ContourStep)
-    {
-        FVector2D Curr = PixelToWorld((float)PX, (float)GetSurfacePixelY(PX));
-        DrawDebugLine(World,
-            FVector(Prev.X, Y, Prev.Y),
-            FVector(Curr.X, Y, Curr.Y),
-            FColor::Green, false, DebugDuration, 0, 4.f);
-        DrawDebugPoint(World,
-            FVector(Curr.X, Y, Curr.Y),
-            8.f, FColor::Red, false, DebugDuration);
-        Prev = Curr;
-    }
-
-    // Boites jaunes inclinées (la collision reelle)
     for (UBoxComponent* Box : SurfaceBoxes)
     {
         if (!Box) continue;
+        // Affiche chaque box en jaune (epaisseur visible en 2D)
         DrawDebugBox(World,
             Box->GetComponentLocation(),
             FVector(Box->GetScaledBoxExtent().X, 4.f, Box->GetScaledBoxExtent().Z),
@@ -294,20 +354,16 @@ void ADestructibleMap::ApplyExplosion(FVector2D WorldPosition, float Radius)
 {
     if (!DestructionMask || !EraseMaterial) return;
 
-    // 1. VISUEL : cercle noir sur le Render Target
+    // 1. VISUEL
     float U, V;
     ConvertWorldToUV(WorldPosition, U, V);
     float RadiusPx = (Radius / MapWorldSize.X) * RTWidth;
 
-    UCanvas* Canvas = nullptr;
-    FVector2D CanvasSize;
-    FDrawToRenderTargetContext Context;
-    UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(
-        GetWorld(), DestructionMask, Canvas, CanvasSize, Context);
+    UCanvas* Canvas = nullptr; FVector2D CanvasSize; FDrawToRenderTargetContext Context;
+    UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(GetWorld(), DestructionMask, Canvas, CanvasSize, Context);
     if (Canvas)
     {
-        UMaterialInstanceDynamic* EraseInst =
-            UMaterialInstanceDynamic::Create(EraseMaterial, this);
+        UMaterialInstanceDynamic* EraseInst = UMaterialInstanceDynamic::Create(EraseMaterial, this);
         Canvas->K2_DrawMaterial(EraseInst,
             FVector2D(U * RTWidth - RadiusPx, V * RTHeight - RadiusPx),
             FVector2D(RadiusPx * 2.f, RadiusPx * 2.f),
@@ -315,57 +371,21 @@ void ADestructibleMap::ApplyExplosion(FVector2D WorldPosition, float Radius)
     }
     UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(GetWorld(), Context);
 
-    // 2. MET A JOUR le cache CPU
+    // 2. CACHE CPU
     float CX = U * RTWidth;
     float CY = V * RTHeight;
     float R2px = RadiusPx * RadiusPx;
-
     int32 MinX = FMath::Clamp((int32)(CX - RadiusPx) - 1, 0, RTWidth - 1);
     int32 MaxX = FMath::Clamp((int32)(CX + RadiusPx) + 1, 0, RTWidth - 1);
     int32 MinY = FMath::Clamp((int32)(CY - RadiusPx) - 1, 0, RTHeight - 1);
     int32 MaxY = FMath::Clamp((int32)(CY + RadiusPx) + 1, 0, RTHeight - 1);
-
     for (int32 PY = MinY; PY <= MaxY; PY++)
         for (int32 PX = MinX; PX <= MaxX; PX++)
             if ((PX - CX) * (PX - CX) + (PY - CY) * (PY - CY) <= R2px)
                 SolidPixels[PY * RTWidth + PX] = false;
 
-    // 3. RECONSTRUCTION PARTIELLE des boxes dans la zone de l'explosion
-    //    Supprime les boxes touchees
-    for (int32 i = SurfaceBoxes.Num() - 1; i >= 0; i--)
-    {
-        UBoxComponent* Box = SurfaceBoxes[i];
-        if (!Box) continue;
-        FVector2D BoxPos(Box->GetComponentLocation().X, Box->GetComponentLocation().Z);
-        if (FVector2D::Distance(BoxPos, WorldPosition) < Radius * 1.5f)
-        {
-            Box->DestroyComponent();
-            SurfaceBoxes.RemoveAt(i);
-        }
-    }
+    // 3. RECONSTRUCTION PARTIELLE de la zone affectee
+    RebuildZone((int32)(CX - RadiusPx * 1.5f), (int32)(CX + RadiusPx * 1.5f));
 
-    //    Recrée les boxes uniquement dans la zone affectee
-    int32 PXMin = FMath::Clamp((int32)((CX - RadiusPx * 1.5f) / RTWidth * RTWidth), 0, RTWidth - 1);
-    int32 PXMax = FMath::Clamp((int32)((CX + RadiusPx * 1.5f) / RTWidth * RTWidth), 0, RTWidth - 1);
-
-    // Aligne sur ContourStep
-    PXMin = (PXMin / ContourStep) * ContourStep;
-    PXMax = FMath::Min(((PXMax / ContourStep) + 1) * ContourStep, RTWidth - ContourStep);
-
-    for (int32 PX = PXMin; PX < PXMax; PX += ContourStep)
-    {
-        int32 SYA = GetSurfacePixelY(PX);
-        int32 SYB = GetSurfacePixelY(PX + ContourStep);
-        if (SYA >= RTHeight && SYB >= RTHeight) continue;
-
-        FVector2D SurfA = PixelToWorld((float)PX, (float)SYA);
-        FVector2D SurfB = PixelToWorld((float)(PX + ContourStep), (float)SYB);
-
-        UBoxComponent* Box = CreateSurfaceBox(SurfA, SurfB);
-        if (Box) SurfaceBoxes.Add(Box);
-    }
-
-    // 4. Debug
-    if (bShowDebugCollision)
-        DrawDebugCollision();
+    if (bShowDebugCollision) DrawDebugCollision();
 }
