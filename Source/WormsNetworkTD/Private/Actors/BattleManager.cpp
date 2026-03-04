@@ -59,7 +59,7 @@ void ABattleManager::RegisterPlayerTeam(ACustomPlayerController* Controller,
 	if (!HasAuthority()) return;
 	if (!Controller)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BattleManager] RegisterPlayerTeam : controller null, ignoré."));
+		//UE_LOG(LogTemp, Log, TEXT("[BattleManager] RegisterPlayerTeam : controller null, ignoré."));
 		return;
 	}
 
