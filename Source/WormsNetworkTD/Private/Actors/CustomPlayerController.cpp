@@ -14,20 +14,16 @@ void ACustomPlayerController::BeginPlay()
 
 	if (GetLocalPlayer())
 	{
-		if (TObjectPtr<UEnhancedInputLocalPlayerSubsystem> InputSystem = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		if (TObjectPtr<UEnhancedInputLocalPlayerSubsystem> InputSystem =
+			GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
 		{
 			InputSystem->AddMappingContext(MappingContextBase, 0);
-		}
-
-		if (UGameViewportClient* VC = GetLocalPlayer()->ViewportClient)
-		{
-			VC->EngineShowFlags.SetLighting(false);
-			VC->EngineShowFlags.SetPostProcessing(false);
 		}
 	}
 
 	MyPlayer = Cast<ACustomPaperCharacter>(GetPawn());
 
+	// Affiche le curseur souris
 	bShowMouseCursor = true;
 	SetInputMode(FInputModeGameAndUI());
 
@@ -39,8 +35,6 @@ void ACustomPlayerController::BeginPlay()
 			//ShowMainMenu(); // Remove for build game
 		}
 	}
-
-	
 }
 
 // ============================================================
@@ -65,6 +59,7 @@ void ACustomPlayerController::SetupInputComponent()
 
 	if (!EIC) return;
 
+	// Binds génériques configurés dans le tableau IA_Setup
 	for (const FInputActionSetup& Setup : IA_Setup)
 	{
 		EIC->BindAction(Setup.Action, Setup.Event, this, Setup.ActionName.GetMemberName());
@@ -138,16 +133,30 @@ void ACustomPlayerController::Fire(const FInputActionValue& Value)
 	if (Now - LastFireTime < FireCooldown) return;
 	LastFireTime = Now;
 
-	FVector MouseWorldLocation, MouseWorldDirection;
-	if (!DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
+	FVector RayOrigin, RayDir;
+	if (!DeprojectMousePositionToWorld(RayOrigin, RayDir))
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("[PC] Fire : DeprojectMousePositionToWorld a échoué."));
 		return;
 	}
 
 	const FVector CharLocation = MyPlayer->GetActorLocation();
+	const float CharY = CharLocation.Y;
+
+	FVector MouseWorldPos;
+	if (FMath::Abs(RayDir.Y) > KINDA_SMALL_NUMBER)
+	{
+		float t = (CharY - RayOrigin.Y) / RayDir.Y;
+		MouseWorldPos = RayOrigin + RayDir * t;
+	}
+	else
+	{
+		MouseWorldPos = RayOrigin;
+	}
+
+
 	const FVector2D CharPos2D(CharLocation.X, CharLocation.Z);
-	const FVector2D MousePos2D(MouseWorldLocation.X, MouseWorldLocation.Z);
+	const FVector2D MousePos2D(MouseWorldPos.X, MouseWorldPos.Z);
 
 	FVector2D Dir2D = MousePos2D - CharPos2D;
 	if (Dir2D.IsNearlyZero()) return;

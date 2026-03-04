@@ -48,7 +48,6 @@ void ADestructibleMap::InitRenderTarget()
     }
 
     MapMesh->SetRelativeScale3D(FVector(MapWorldSize.X / 100.f, MapWorldSize.Y / 100.f, 1.f));
-    //MapMesh->SetRelativeRotation(FRotator(90.f, 0.f, 0.f));
     UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: Init OK %dx%d"), RTWidth, RTHeight);
 }
 
@@ -59,6 +58,7 @@ void ADestructibleMap::BuildSolidPixels()
 {
     if (!MapTexture) return;
 
+#if WITH_EDITOR
     FTexture2DMipMap& Mip = MapTexture->GetPlatformData()->Mips[0];
     if (!Mip.BulkData.IsBulkDataLoaded()) Mip.BulkData.LoadBulkDataWithFileReader();
 
@@ -74,9 +74,9 @@ void ADestructibleMap::BuildSolidPixels()
         return;
     }
     Mip.BulkData.Unlock();
-
-    // Fallback
     UE_LOG(LogTemp, Warning, TEXT("DestructibleMap: fallback RT..."));
+#endif
+
     UTextureRenderTarget2D* TempRT = UKismetRenderingLibrary::CreateRenderTarget2D(GetWorld(), RTWidth, RTHeight, RTF_RGBA8);
     UCanvas* C; FVector2D CS; FDrawToRenderTargetContext Ctx;
     UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(GetWorld(), TempRT, C, CS, Ctx);
@@ -128,18 +128,6 @@ bool ADestructibleMap::IsSolid(FVector2D WorldPosition) const
 
 // ============================================================
 //  SpawnBoxesForColumn
-//
-//  Parcourt UNE colonne de pixels et cree une box plate
-//  a chaque transition vide->solide (= chaque surface).
-//
-//  La box est :
-//    - Centree en X sur la colonne
-//    - Centree en Y sur l'acteur (couvre la capsule du perso)
-//    - Fine en Z (BoxHalfHeight)
-//    - Large en X (ContourStep pixels converti en units world)
-//
-//  Pas de pairing, pas d'inclinaison artificielle.
-//  Chaque box est independante et plate.
 // ============================================================
 void ADestructibleMap::SpawnBoxesForColumn(int32 PX)
 {
@@ -149,14 +137,12 @@ void ADestructibleMap::SpawnBoxesForColumn(int32 PX)
     const FVector Loc = GetActorLocation();
     const float   HalfY = BoxHalfDepthY;
 
-    // Largeur world d'une colonne de ContourStep pixels
     float WorldLeft = PixelToWorld((float)PX, 0.f).X;
     float WorldRight = PixelToWorld((float)(PX + ContourStep), 0.f).X;
     float CenterX = (WorldLeft + WorldRight) * 0.5f;
     float HalfX = FMath::Abs(WorldRight - WorldLeft) * 0.5f;
     if (HalfX < 0.1f) return;
 
-    // Helper : cree une box a la position donnee
     auto SpawnBox = [&](float WorldZ, float ExtX, float ExtZ, float RotRoll)
         {
             UBoxComponent* Box = NewObject<UBoxComponent>(this);
@@ -172,8 +158,8 @@ void ADestructibleMap::SpawnBoxesForColumn(int32 PX)
             SurfaceBoxes.Add(Box);
         };
 
-    bool bPrevSolid = false;
-    int32 SolidStartPY = 0; // PY ou la zone solide a commence
+    bool  bPrevSolid = false;
+    int32 SolidStartPY = 0;
 
     for (int32 PY = 0; PY < RTHeight; PY++)
     {
@@ -181,17 +167,12 @@ void ADestructibleMap::SpawnBoxesForColumn(int32 PX)
 
         if (bSolid && !bPrevSolid)
         {
-            // Transition VIDE->SOLIDE : surface du dessus (sol)
-            // On place une box plate horizontale
             SolidStartPY = PY;
             FVector2D SurfWorld = PixelToWorld((float)PX, (float)PY);
             SpawnBox(SurfWorld.Y, HalfX, BoxHalfHeight, 0.f);
         }
         else if (!bSolid && bPrevSolid)
         {
-            // Transition SOLIDE->VIDE : paroi laterale (bord bas du terrain)
-            // On place une box murale verticale sur le cote du trou
-            // Hauteur de la paroi = epaisseur de la zone solide qu'on vient de quitter
             int32 WallHeightPx = PY - SolidStartPY;
             float WallHalfZ = FMath::Max(
                 (float)WallHeightPx / RTHeight * MapWorldSize.Y * 0.5f,
@@ -207,9 +188,6 @@ void ADestructibleMap::SpawnBoxesForColumn(int32 PX)
 
 // ============================================================
 //  SpawnBoxesForRow
-//  Scanne UNE ligne de pixels et place une box murale
-//  a chaque transition vide->solide (mur gauche)
-//  et solide->vide (mur droit).
 // ============================================================
 void ADestructibleMap::SpawnBoxesForRow(int32 PY)
 {
@@ -219,7 +197,6 @@ void ADestructibleMap::SpawnBoxesForRow(int32 PY)
     const FVector Loc = GetActorLocation();
     const float   HalfY = BoxHalfDepthY;
 
-    // Hauteur world de cette ligne
     float WorldTop = PixelToWorld(0.f, (float)PY).Y;
     float WorldBottom = PixelToWorld(0.f, (float)(PY + ContourStep)).Y;
     float CenterZ = (WorldTop + WorldBottom) * 0.5f;
@@ -233,7 +210,6 @@ void ADestructibleMap::SpawnBoxesForRow(int32 PY)
 
         if (bSolid && !bPrevSolid)
         {
-            // Transition vide->solide : mur gauche
             FVector2D WallWorld = PixelToWorld((float)PX, (float)PY);
             UBoxComponent* Box = NewObject<UBoxComponent>(this);
             Box->RegisterComponent();
@@ -249,7 +225,6 @@ void ADestructibleMap::SpawnBoxesForRow(int32 PY)
         }
         else if (!bSolid && bPrevSolid)
         {
-            // Transition solide->vide : mur droit
             FVector2D WallWorld = PixelToWorld((float)(PX - 1), (float)PY);
             UBoxComponent* Box = NewObject<UBoxComponent>(this);
             Box->RegisterComponent();
@@ -269,7 +244,7 @@ void ADestructibleMap::SpawnBoxesForRow(int32 PY)
 }
 
 // ============================================================
-//  RebuildSurfaceBoxes — reconstruit toutes les boxes
+//  RebuildSurfaceBoxes
 // ============================================================
 void ADestructibleMap::RebuildSurfaceBoxes()
 {
@@ -279,11 +254,9 @@ void ADestructibleMap::RebuildSurfaceBoxes()
 
     if (SolidPixels.IsEmpty()) return;
 
-    // Scan par colonnes : surfaces haut/bas
     for (int32 PX = 0; PX < RTWidth - ContourStep; PX += ContourStep)
         SpawnBoxesForColumn(PX);
 
-    // Scan par lignes : parois gauche/droite
     for (int32 PY = 0; PY < RTHeight - ContourStep; PY += ContourStep)
         SpawnBoxesForRow(PY);
 
@@ -291,11 +264,10 @@ void ADestructibleMap::RebuildSurfaceBoxes()
 }
 
 // ============================================================
-//  RebuildZone — reconstruit uniquement une zone en pixel X
+//  RebuildZone
 // ============================================================
 void ADestructibleMap::RebuildZone(int32 PixelXMin, int32 PixelXMax)
 {
-    // Supprime les boxes dans la zone
     FVector2D ZoneWorldLeft = PixelToWorld((float)PixelXMin, 0.f);
     FVector2D ZoneWorldRight = PixelToWorld((float)PixelXMax, 0.f);
 
@@ -311,16 +283,12 @@ void ADestructibleMap::RebuildZone(int32 PixelXMin, int32 PixelXMax)
         }
     }
 
-    // Recrée les boxes dans la zone — colonnes ET lignes
     int32 PXMin = (PixelXMin / ContourStep) * ContourStep;
     int32 PXMax = FMath::Min(((PixelXMax / ContourStep) + 1) * ContourStep, RTWidth - ContourStep);
 
-    // Colonnes : surfaces haut/bas
     for (int32 PX = PXMin; PX < PXMax; PX += ContourStep)
         SpawnBoxesForColumn(PX);
 
-    // Lignes : parois gauche/droite dans la zone affectee
-    // On trouve les PY min/max en pixel correspondant a la zone world
     for (int32 PY = 0; PY < RTHeight - ContourStep; PY += ContourStep)
         SpawnBoxesForRow(PY);
 }
@@ -331,12 +299,10 @@ void ADestructibleMap::RebuildZone(int32 PixelXMin, int32 PixelXMax)
 void ADestructibleMap::DrawDebugCollision()
 {
     const UWorld* World = GetWorld();
-    const float   Y = GetActorLocation().Y;
 
     for (UBoxComponent* Box : SurfaceBoxes)
     {
         if (!Box) continue;
-        // Affiche chaque box en jaune (epaisseur visible en 2D)
         DrawDebugBox(World,
             Box->GetComponentLocation(),
             FVector(Box->GetScaledBoxExtent().X, 4.f, Box->GetScaledBoxExtent().Z),
@@ -354,7 +320,6 @@ void ADestructibleMap::ApplyExplosion(FVector2D WorldPosition, float Radius)
 {
     if (!DestructionMask || !EraseMaterial) return;
 
-    // 1. VISUEL
     float U, V;
     ConvertWorldToUV(WorldPosition, U, V);
     float RadiusPx = (Radius / MapWorldSize.X) * RTWidth;
@@ -371,7 +336,6 @@ void ADestructibleMap::ApplyExplosion(FVector2D WorldPosition, float Radius)
     }
     UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(GetWorld(), Context);
 
-    // 2. CACHE CPU
     float CX = U * RTWidth;
     float CY = V * RTHeight;
     float R2px = RadiusPx * RadiusPx;
@@ -384,7 +348,6 @@ void ADestructibleMap::ApplyExplosion(FVector2D WorldPosition, float Radius)
             if ((PX - CX) * (PX - CX) + (PY - CY) * (PY - CY) <= R2px)
                 SolidPixels[PY * RTWidth + PX] = false;
 
-    // 3. RECONSTRUCTION PARTIELLE de la zone affectee
     RebuildZone((int32)(CX - RadiusPx * 1.5f), (int32)(CX + RadiusPx * 1.5f));
 
     if (bShowDebugCollision) DrawDebugCollision();
