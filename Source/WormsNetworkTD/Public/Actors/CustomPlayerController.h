@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -11,6 +9,7 @@
 #include "CustomPaperCharacter.h"
 #include "UI/UIMenu.h"
 #include "WormsGameInstance.h"
+#include "Actors/BulletBomb.h"
 #include "CustomPlayerController.generated.h"
 
 USTRUCT(BlueprintType)
@@ -38,20 +37,20 @@ protected:
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
 
-	/**
-	 * Appelé automatiquement par le moteur sur tous les clients
-	 * juste avant le ClientTravel. On en profite pour cacher le menu
-	 * et poser le flag bGameStarted avant que BeginPlay se relance.
-	 */
 	virtual void ClientTravelInternal_Implementation(const FString& URL,
 		ETravelType TravelType, bool bSeamless,
 		const FGuid& MapPackageGuid);
+
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inputs")
 	TObjectPtr<class UInputMappingContext> MappingContextBase = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inputs")
 	TArray<FInputActionSetup> IA_Setup;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inputs")
+	TObjectPtr<UInputAction> IA_Fire;
+
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Data")
 	TObjectPtr<ACustomPaperCharacter> MyPlayer = nullptr;
@@ -62,17 +61,36 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UUIMenu> MenuWidgetInstance;
 
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+	TSubclassOf<ABulletBomb> BulletBombClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon")
+	float SpawnOffset = 60.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon")
+	float FireCooldown = 0.5f;
+
+private:
+	float LastFireTime = -999.f;
+
 #if WITH_EDITOR
 	UFUNCTION(BlueprintInternalUseOnly)
 	void Prototype_InputAction(const FInputActionValue& Value) {};
 #endif
 
 public:
+
+
 	UFUNCTION(BlueprintCallable)
 	void Move(const FInputActionValue& Value);
 
 	UFUNCTION(BlueprintCallable)
 	void Jump(const FInputActionValue& Value);
+
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	void Fire(const FInputActionValue& Value);
+
 
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ShowMainMenu();
@@ -80,11 +98,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void HideMainMenu();
 
-	/**
-	 * RPC Client ? appelé par le GameMode sur tous les PlayerControllers
-	 * connectés juste avant ServerTravel pour que chaque client cache
-	 * son menu et pose son flag bGameStarted.
-	 */
 	UFUNCTION(Client, Reliable)
 	void Client_NotifyGameStarting();
+
+private:
+
+	void SpawnProjectile(FVector ProjectileSpawnPos, FVector Direction);
 };

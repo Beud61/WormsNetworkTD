@@ -1,7 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "Actors/CustomPlayerController.h"
 #include "WormsGameInstance.h"
+
+// ============================================================
+//  BeginPlay
+// ============================================================
 
 void ACustomPlayerController::BeginPlay()
 {
@@ -12,44 +14,60 @@ void ACustomPlayerController::BeginPlay()
 
 	if (GetLocalPlayer())
 	{
-		if (TObjectPtr<UEnhancedInputLocalPlayerSubsystem> InputSystem =
-			GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		if (TObjectPtr<UEnhancedInputLocalPlayerSubsystem> InputSystem = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
 		{
 			InputSystem->AddMappingContext(MappingContextBase, 0);
+		}
+
+		if (UGameViewportClient* VC = GetLocalPlayer()->ViewportClient)
+		{
+			VC->EngineShowFlags.SetLighting(false);
+			VC->EngineShowFlags.SetPostProcessing(false);
 		}
 	}
 
 	MyPlayer = Cast<ACustomPaperCharacter>(GetPawn());
 
-	// On n'affiche le menu que si la partie n'a pas encore commencé.
-	// Sans ce guard, BeginPlay recrée le menu sur la nouvelle map
-	// après le ServerTravel car le PlayerController survit au travel.
+	bShowMouseCursor = true;
+	SetInputMode(FInputModeGameAndUI());
+
 	if (IsLocalController())
 	{
 		UWormsGameInstance* GI = Cast<UWormsGameInstance>(GetGameInstance());
 		if (!GI || !GI->bGameStarted)
 		{
-			//ShowMainMenu();//Remove for build game
+			//ShowMainMenu(); // Remove for build game
 		}
 	}
+
+	
 }
+
+// ============================================================
+//  Tick
+// ============================================================
 
 void ACustomPlayerController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 }
 
+// ============================================================
+//  SetupInputComponent
+// ============================================================
+
 void ACustomPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	if (TObjectPtr<UEnhancedInputComponent> EnhancedInputComponent =
-		Cast<UEnhancedInputComponent>(InputComponent))
+	TObjectPtr<UEnhancedInputComponent> EIC =
+		Cast<UEnhancedInputComponent>(InputComponent);
+
+	if (!EIC) return;
+
+	for (const FInputActionSetup& Setup : IA_Setup)
 	{
-		for (FInputActionSetup i : IA_Setup)
-		{
-			EnhancedInputComponent->BindAction(i.Action, i.Event, this, i.ActionName.GetMemberName());
-		}
+		EIC->BindAction(Setup.Action, Setup.Event, this, Setup.ActionName.GetMemberName());
 	}
 }
 
@@ -60,8 +78,6 @@ void ACustomPlayerController::SetupInputComponent()
 void ACustomPlayerController::ClientTravelInternal_Implementation(const FString& URL,
 	ETravelType TravelType, bool bSeamless, const FGuid& MapPackageGuid)
 {
-	// Pose le flag dans le GameInstance (survit au travel) et cache le menu
-	// AVANT que le Super déclenche le vrai travel et détruise le monde.
 	UE_LOG(LogTemp, Warning, TEXT("ClientTravelInternal: URL=%s"), *URL);
 	if (UWormsGameInstance* GI = Cast<UWormsGameInstance>(GetGameInstance()))
 	{
@@ -73,12 +89,11 @@ void ACustomPlayerController::ClientTravelInternal_Implementation(const FString&
 }
 
 // ============================================================
-//  RPC Client
+//  RPC Client — Game Starting
 // ============================================================
 
 void ACustomPlayerController::Client_NotifyGameStarting_Implementation()
 {
-	// Appelé par le serveur sur chaque PC connecté juste avant ServerTravel.
 	UE_LOG(LogTemp, Warning, TEXT("Client_NotifyGameStarting appele."));
 	if (UWormsGameInstance* GI = Cast<UWormsGameInstance>(GetGameInstance()))
 	{
@@ -88,7 +103,7 @@ void ACustomPlayerController::Client_NotifyGameStarting_Implementation()
 }
 
 // ============================================================
-//  Input
+//  Input — Move / Jump
 // ============================================================
 
 void ACustomPlayerController::Move(const FInputActionValue& Value)
@@ -108,6 +123,65 @@ void ACustomPlayerController::Jump(const FInputActionValue& Value)
 {
 	if (!MyPlayer) return;
 	MyPlayer->Jump();
+}
+
+// ============================================================
+//  Input — Fire
+// ============================================================
+
+void ACustomPlayerController::Fire(const FInputActionValue& Value)
+{
+	if (!IsLocalController() || !MyPlayer) return;
+
+	// Cooldown
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastFireTime < FireCooldown) return;
+	LastFireTime = Now;
+
+	FVector MouseWorldLocation, MouseWorldDirection;
+	if (!DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("[PC] Fire : DeprojectMousePositionToWorld a échoué."));
+		return;
+	}
+
+	const FVector CharLocation = MyPlayer->GetActorLocation();
+	const FVector2D CharPos2D(CharLocation.X, CharLocation.Z);
+	const FVector2D MousePos2D(MouseWorldLocation.X, MouseWorldLocation.Z);
+
+	FVector2D Dir2D = MousePos2D - CharPos2D;
+	if (Dir2D.IsNearlyZero()) return;
+	Dir2D.Normalize();
+
+	const FVector Direction3D(Dir2D.X, 0.f, Dir2D.Y);
+	const FVector ProjectileSpawnPos = CharLocation + Direction3D * SpawnOffset;
+
+	SpawnProjectile(ProjectileSpawnPos, Direction3D);
+}
+
+// ============================================================
+//  SpawnProjectile
+// ============================================================
+
+void ACustomPlayerController::SpawnProjectile(FVector ProjectileSpawnPos, FVector Direction)
+{
+	if (!BulletBombClass || !MyPlayer) return;
+
+	FActorSpawnParameters Params;
+	Params.Owner = MyPlayer;
+	Params.Instigator = MyPlayer;
+	Params.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	ABulletBomb* Projectile = GetWorld()->SpawnActor<ABulletBomb>(
+		BulletBombClass, ProjectileSpawnPos, FRotator::ZeroRotator, Params);
+
+	if (Projectile)
+	{
+		Projectile->Launch(Direction);
+		UE_LOG(LogTemp, Log, TEXT("[PC] Projectile spawné -> pos=(%.1f, %.1f) dir=(%.2f, %.2f)"),
+			ProjectileSpawnPos.X, ProjectileSpawnPos.Z, Direction.X, Direction.Z);
+	}
 }
 
 // ============================================================
@@ -134,7 +208,5 @@ void ACustomPlayerController::HideMainMenu()
 	if (MenuWidgetInstance)
 	{
 		MenuWidgetInstance->CloseMenu();
-		// On garde la référence pour ne pas recréer le widget
-		// si ShowMainMenu est rappelé (ex: retour au menu principal).
 	}
 }

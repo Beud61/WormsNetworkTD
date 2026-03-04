@@ -1,8 +1,14 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
 #include "Actors/BulletBomb.h"
 #include "Actors/DestructibleMap.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "UObject/ConstructorHelpers.h"
 
+// ============================================================
+//  Constructor
+// ============================================================
 
 ABulletBomb::ABulletBomb()
 {
@@ -10,16 +16,28 @@ ABulletBomb::ABulletBomb()
 	bReplicates = true;
 	SetReplicateMovement(true);
 
+
 	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
 	CollisionSphere->InitSphereRadius(12.f);
 	CollisionSphere->SetCollisionProfileName(TEXT("BlockAllDynamic"));
-
 	CollisionSphere->SetNotifyRigidBodyCollision(true);
 	RootComponent = CollisionSphere;
 
 
+	/*Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	Mesh->SetupAttachment(RootComponent);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(
+		TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (SphereMesh.Succeeded())
+	{
+		Mesh->SetStaticMesh(SphereMesh.Object);
+		Mesh->SetRelativeScale3D(FVector(0.24f));
+	}*/
+
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
-	ProjectileMovement->InitialSpeed = 0.f;
+	ProjectileMovement->InitialSpeed = 0.f; 
 	ProjectileMovement->MaxSpeed = 3000.f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->ProjectileGravityScale = 1.5f;
@@ -38,15 +56,12 @@ void ABulletBomb::BeginPlay()
 {
 	Super::BeginPlay();
 
-
 	if (HasAuthority())
 	{
 		CollisionSphere->OnComponentHit.AddDynamic(this, &ABulletBomb::OnHit);
 
-
 		SetLifeSpan(LifeSpan);
 	}
-
 
 	TArray<AActor*> Found;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADestructibleMap::StaticClass(), Found);
@@ -66,7 +81,6 @@ void ABulletBomb::BeginPlay()
 
 void ABulletBomb::Launch(FVector Direction)
 {
-
 	Direction.Y = 0.f;
 	Direction.Normalize();
 
@@ -91,7 +105,6 @@ void ABulletBomb::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	UE_LOG(LogTemp, Log, TEXT("[BulletBomb] Impact sur %s en (%.1f, %.1f, %.1f)"),
 		OtherActor ? *OtherActor->GetName() : TEXT("World"),
 		HitLocation.X, HitLocation.Y, HitLocation.Z);
-
 
 	if (IsValid(DestructibleMap))
 	{
